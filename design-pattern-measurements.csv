@@ -1,0 +1,5 @@
+dataset,rows,phase,median_ms,thread_allocated_bytes,same_haups,original_rescans,tight_rescans,original_combined_nodes,tight_combined_nodes
+paper-scaled-9000,9000,before,48.695,51500240,true,2,1,37,23
+paper-scaled-9000,9000,after,74.878,51500240,true,2,1,37,23
+synthetic-1000,1000,before,107.486,105182264,true,4,4,3488,3488
+synthetic-1000,1000,after,109.762,105182264,true,4,4,3488,3488

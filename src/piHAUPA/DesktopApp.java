@@ -81,9 +81,10 @@ public final class DesktopApp extends JFrame {
     private final JLabel finalThresholdLabel = label("", 11, Font.PLAIN, MUTED);
     private final JLabel statusLabel = new JLabel("●  Đã nạp dữ liệu bài báo");
     private final JLabel loadingSourceLabel = label("", 13, Font.PLAIN, MUTED);
-    private final JButton runButton = primaryButton("Chạy và so sánh   →");
+    private final JButton runButton = primaryButton("Chạy PIHAUPA   →");
     private final JButton exportButton = secondaryButton("↓  Xuất TXT và CSV kết quả");
     private RunResult lastRun;
+    private String selectedArchiveDataset;
     private final CardLayout resultCards = new CardLayout();
     private final JPanel resultHost = new JPanel(resultCards);
     private final JPanel overviewTab = new JPanel(new BorderLayout(12, 12));
@@ -116,6 +117,14 @@ public final class DesktopApp extends JFrame {
     private JPanel createHeader() {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(SURFACE);
+        /* DESIGN PATTERN: Static Factory có sẵn trong Swing.
+         * Vai trò: BorderFactory tạo đối tượng Border; header là thành phần sử dụng.
+         * createMatteBorder tạo đường kẻ, createEmptyBorder tạo khoảng đệm;
+         * createCompoundBorder ghép hai border để không phải tự vẽ từng phần.
+         * Mục đích: cách dựng đường viền thống nhất, dễ đổi màu và khoảng cách.
+         * Tối ưu hiện có: dựng border lúc tạo giao diện, không dựng lại mỗi lần nhấn nút.
+         * Đây là hàm tạo tĩnh của thư viện, không phải tự cài GoF Factory Method.
+         */
         header.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER),
                 BorderFactory.createEmptyBorder(14, 26, 14, 26)));
@@ -311,6 +320,17 @@ public final class DesktopApp extends JFrame {
         c.insets = new Insets(0, 0, 0, 0);
         card.add(Box.createVerticalGlue(), c);
 
+        /* DESIGN PATTERN: Observer thông qua cơ chế ActionListener của Swing.
+         * Đối tượng phát sự kiện: các JButton; đối tượng nhận: listener viết bằng lambda.
+         * addActionListener đăng ký listener; khi nhấn nút, Swing gọi lambda trên EDT
+         * (luồng xử lý sự kiện giao diện), rồi lambda gọi hành động tương ứng bên dưới.
+         * Mục đích: JButton không cần biết thuật toán khai phá hay cách xuất báo cáo.
+         * Tối ưu hiện có: đăng ký một lần khi dựng giao diện để tránh xử lý sự kiện trùng.
+         * Hàm runAnalysis/exportLastRun chuyển phần xử lý nặng sang SwingWorker;
+         * listener chỉ khởi động công việc, giúp EDT tiếp tục phản hồi giao diện.
+         * Lưu ý: hộp thoại modal vẫn có thể chờ người dùng; Observer không bảo đảm mọi
+         * hành động đều nhanh, và tự nó không làm thuật toán khai phá chạy nhanh hơn.
+         */
         chooseInput.addActionListener(event -> chooseFile());
         sampleButton.addActionListener(event -> usePaperSample());
         chooseOutput.addActionListener(event -> chooseOutputDirectory());
@@ -363,7 +383,7 @@ public final class DesktopApp extends JFrame {
         c.insets = new Insets(0, 0, 8, 0);
         loading.add(loadingSourceLabel, c);
         c.gridy++;
-        loading.add(label("Original Eq.(5) và Tight Eq.(6) đang chạy trên cùng dữ liệu.",
+        loading.add(label("Đang tính Bước 1–5 của PIHAUPA Tight.",
                 13, Font.PLAIN, MUTED), c);
         return loading;
     }
@@ -389,9 +409,7 @@ public final class DesktopApp extends JFrame {
         report.add(Box.createVerticalStrut(18));
         report.add(section("04", "Diễn tiến theo batch", "Đọc lần lượt từ DB0 đến batch mới nhất", batchTab));
         report.add(Box.createVerticalStrut(18));
-        report.add(section("05", "Original và Tight", "So sánh hai điều kiện re-scan trên cùng dữ liệu", comparisonView()));
-        report.add(Box.createVerticalStrut(18));
-        report.add(section("06", "Tập mẫu cuối cùng", "HAUP đầy đủ; PRE-LARGE là các ứng viên đang được quản lý", patternView()));
+        report.add(section("05", "Tập mẫu cuối cùng", "HAUP đầy đủ; PRE-LARGE là các ứng viên đang được quản lý", patternView()));
         reportScroll = scroll(report);
         dashboard.add(reportScroll, BorderLayout.CENTER);
         return dashboard;
@@ -448,9 +466,7 @@ public final class DesktopApp extends JFrame {
         return section;
     }
 
-    private void populateDashboard(ComparisonReport comparison, InputData input) {
-        AnalysisReport tight = comparison.tight();
-        AnalysisReport original = comparison.original();
+    private void populateDashboard(AnalysisReport tight, InputData input) {
         int transactionCount = input.batches().stream().mapToInt(batch -> batch.transactions().size()).sum();
         reportSourceLabel.setText(inputNameLabel.getText());
         reportMetaLabel.setText(input.externalUtilities().size() + " item  ·  " + input.batches().size()
@@ -465,14 +481,13 @@ public final class DesktopApp extends JFrame {
         metrics.add(metric("HAUP CUỐI", String.valueOf(last.largePatterns().size()),
                 last.preLargePatterns().size() + " pre-large"));
         metrics.add(metric("TU CUỐI", f(last.totalTransactionUtility()), "sau " + tight.batchCount() + " batch"));
-        metrics.add(metric("RE-SCAN TIGHT", String.valueOf(tight.stats().rescanCount()),
-                "Original: " + original.stats().rescanCount() + " lần"));
-        metrics.add(metric("THỜI GIAN TIGHT", f(tight.elapsedNanos() / 1_000_000.0) + " ms", "trung vị quan sát"));
+        metrics.add(metric("RE-SCAN", String.valueOf(tight.stats().rescanCount()),
+                tight.stats().patternsVisited() + " mẫu duyệt"));
+        metrics.add(metric("THỜI GIAN", f(tight.elapsedNanos() / 1_000_000.0) + " ms", "không gồm đọc tệp"));
         metrics.add(metric("HEAP PEAK", f(tight.peakMemoryBytes() / 1048576.0) + " MB", "JVM heap"));
         overviewTab.add(metrics, BorderLayout.NORTH);
-        overviewTab.add(overviewBody(comparison, last), BorderLayout.CENTER);
+        overviewTab.add(overviewBody(tight, last), BorderLayout.CENTER);
 
-        setComparisonRows(original, tight, comparison.sameHaups());
         populateBatches(tight);
         setPatternRows(last);
         finalThresholdLabel.setText("Lower " + f(last.minUtilLower()) + "  ≤  AU  <  Upper "
@@ -545,30 +560,22 @@ public final class DesktopApp extends JFrame {
         patternTable.getColumnModel().getColumn(5).setPreferredWidth(230);
     }
 
-    private JPanel overviewBody(ComparisonReport comparison, AnalysisReport.BatchView last) {
-        AnalysisReport old = comparison.original();
-        AnalysisReport tight = comparison.tight();
+    private JPanel overviewBody(AnalysisReport tight, AnalysisReport.BatchView last) {
         JPanel body = new JPanel();
         body.setOpaque(false);
         body.setBorder(BorderFactory.createEmptyBorder(2, 0, 0, 0));
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
-        Color statusColor = comparison.sameHaups() ? TEAL : new Color(210, 55, 75);
-        Color statusFill = comparison.sameHaups() ? TEAL_SOFT : new Color(255, 235, 239);
-        RoundedPanel verdict = new RoundedPanel(14, statusFill);
+        RoundedPanel verdict = new RoundedPanel(14, TEAL_SOFT);
         verdict.setLayout(new BorderLayout(14, 0));
         verdict.setBorder(BorderFactory.createEmptyBorder(16, 18, 16, 18));
-        JLabel icon = label(comparison.sameHaups() ? "✓" : "!", 24, Font.BOLD, statusColor);
+        JLabel icon = label("✓", 24, Font.BOLD, TEAL);
         verdict.add(icon, BorderLayout.WEST);
-        long saved = old.stats().rescanCount() - tight.stats().rescanCount();
-        String conclusion = comparison.sameHaups()
-                ? saved > 0 ? "Hai chính sách có cùng HAUP cuối; Tight giảm " + saved + " lần re-scan."
-                : saved == 0 ? "Hai chính sách có cùng HAUP cuối và cùng số lần re-scan."
-                : "Hai chính sách có cùng HAUP cuối; Tight re-scan nhiều hơn " + (-saved) + " lần."
-                : "Hai chính sách cho tập HAUP cuối khác nhau; cần xem lại dữ liệu và ngưỡng.";
+        String conclusion = last.largePatterns().size() + " HAUP cuối; "
+                + tight.stats().rescanCount() + " re-scan; "
+                + tight.stats().patternsVisited() + " mẫu đã duyệt.";
         verdict.add(vertical(
-                label(comparison.sameHaups() ? "Kết quả HAUP cuối trùng khớp" : "Kết quả cần kiểm tra lại",
-                        16, Font.BOLD, INK),
+                label("Kết quả PIHAUPA Tight", 16, Font.BOLD, INK),
                 label(conclusion, 12, Font.PLAIN, MUTED)), BorderLayout.CENTER);
         body.add(verdict);
         body.add(Box.createVerticalStrut(12));
@@ -577,7 +584,7 @@ public final class DesktopApp extends JFrame {
         route.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
         route.setLayout(new BorderLayout());
         route.add(label("LUỒNG PHÂN TÍCH", 10, Font.BOLD, PRIMARY), BorderLayout.NORTH);
-        route.add(label("Giao dịch → Utility → AU → LARGE / PRE-LARGE → Tight re-scan → HAUP cuối",
+        route.add(label("A Đầu vào → B Ngưỡng → C Khai phá → D Re-scan → E HAUP",
                 13, Font.BOLD, INK), BorderLayout.CENTER);
         body.add(route);
         return body;
@@ -675,8 +682,8 @@ public final class DesktopApp extends JFrame {
                 "U(P,T) = tổng IU(i,T) × EU(i)",
                 "AU(P) = tổng U(P,T) / |P| trên các giao dịch chứa P.", PRIMARY, PRIMARY_SOFT));
         formulas.add(explanationCard("02  PHÂN LOẠI MẪU",
-                "Upper = Su × TU(DB)   ·   Lower = Sl × TU(DB)",
-                "AU ≥ Upper: LARGE  ·  Lower ≤ AU < Upper: PRE-LARGE  ·  còn lại: SMALL.", TEAL, TEAL_SOFT));
+                "Upper = S_u × TU(DB)   ·   Lower = S_l × TU(DB)",
+                "AU ≥ Upper: LARGE / HAUP  ·  Lower ≤ AU < Upper: PRE-LARGE  ·  còn lại: SMALL.", TEAL, TEAL_SOFT));
         content.add(formulas);
         content.add(Box.createVerticalStrut(12));
 
@@ -685,10 +692,10 @@ public final class DesktopApp extends JFrame {
         rescan.setLayout(new BorderLayout(0, 7));
         rescan.add(label("03  QUYẾT ĐỊNH RE-SCAN KHI CÓ BATCH MỚI", 11, Font.BOLD, AMBER), BorderLayout.NORTH);
         rescan.add(vertical(
-                label("MU(ID) − Su × TU(ID) ≥ (Su − Sl) × TU(OD)", 14, Font.BOLD, INK),
-                label("OD: dữ liệu ở lần quét toàn bộ gần nhất. ID: dữ liệu tích luỹ từ sau lần quét đó.",
+                label("Eq. (12): MU(ID) − S_u × TU(ID) ≥ (S_u − S_l) × TU(OD)", 14, Font.BOLD, INK),
+                label("OD: original database ở lần re-scan gần nhất. ID: incremental database tích luỹ sau đó.",
                         11, Font.PLAIN, MUTED),
-                label("Đúng: quét lại và mở rộng mẫu. Sai: chỉ cập nhật các mẫu đã giữ trong pattern tree.",
+                label("Đúng: re-scan OD ∪ ID, dựng lại GL/PT và PatternExpansion. Sai: scan batch mới, cập nhật PT hiện có.",
                         11, Font.PLAIN, MUTED)), BorderLayout.CENTER);
         content.add(rescan);
         content.add(Box.createVerticalStrut(13));
@@ -778,6 +785,24 @@ public final class DesktopApp extends JFrame {
         view.setBorder(BorderFactory.createEmptyBorder(14, 12, 16, 12));
         view.setLayout(new BoxLayout(view, BoxLayout.Y_AXIS));
 
+        RoundedPanel steps = new RoundedPanel(12, PRIMARY_SOFT);
+        steps.setLayout(new GridLayout(0, 1, 0, 5));
+        steps.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
+        steps.add(label("BƯỚC 1  ĐẦU VÀO  ·  " + batch.transactionCount() + " giao dịch; tích lũy "
+                + batch.cumulativeTransactionCount(), 11, Font.BOLD, INK));
+        steps.add(label("BƯỚC 2  NGƯỠNG  ·  Su×TU=" + f(batch.minUtilUpper())
+                + "  |  Sl×TU=" + f(batch.minUtilLower()), 11, Font.BOLD, INK));
+        var maxBound = report.upperBounds().entrySet().stream()
+                .max(Map.Entry.comparingByValue());
+        steps.add(label("BƯỚC 3  RE-SCAN  ·  " + batch.action(), 11, Font.BOLD, INK));
+        steps.add(label("BƯỚC 4  AUUB TOÀN LƯỢT  ·  " + maxBound.map(e -> e.getKey() + " = " + f(e.getValue()))
+                .orElse("không có") + "  |  " + report.stats().patternsVisited() + " mẫu duyệt",
+                11, Font.BOLD, INK));
+        steps.add(label("BƯỚC 5  KẾT QUẢ  ·  " + batch.largePatterns().size() + " LARGE; "
+                + batch.preLargePatterns().size() + " PRE-LARGE", 11, Font.BOLD, INK));
+        view.add(steps);
+        view.add(Box.createVerticalStrut(12));
+
         JPanel metrics = new JPanel(new GridLayout(2, 3, 9, 9));
         metrics.setOpaque(false);
         metrics.add(metric("GIAO DỊCH", String.valueOf(batch.transactionCount()), batch.name()));
@@ -797,9 +822,9 @@ public final class DesktopApp extends JFrame {
         decision.setLayout(new BorderLayout(12, 0));
         decision.setBorder(BorderFactory.createEmptyBorder(15, 17, 15, 17));
         decision.add(label(initial ? "1" : rescan ? "↻" : "✓", 24, Font.BOLD, accent), BorderLayout.WEST);
-        String detail = initial ? "Quét dữ liệu ban đầu, tạo PIHAUP-List và mở rộng mẫu."
-                : rescan ? "Quét lại toàn bộ dữ liệu, tạo lại PIHAUP-List và pattern tree."
-                : "Chỉ cập nhật các mẫu LARGE/PRE-LARGE đang giữ trong pattern tree.";
+        String detail = initial ? "Initial scan: Construct(GL), Restructure(GL), PatternExpansion(GL) để tạo PT."
+                : rescan ? "Re-scan OD ∪ ID; dựng lại global PIHAUP-List (GL) và pattern tree (PT)."
+                : "Không re-scan: scan batch mới và cập nhật utility của các node hiện có trong PT.";
         JPanel explanation = vertical(label(initial ? "KHỞI TẠO PATTERN TREE"
                         : rescan ? "RE-SCAN TOÀN BỘ" : "CẬP NHẬT PATTERN TREE", 14, Font.BOLD, accent),
                 label(detail, 11, Font.PLAIN, new Color(74, 87, 103)));
@@ -901,24 +926,54 @@ public final class DesktopApp extends JFrame {
                 ? "Tables 2–3 · dữ liệu bài báo" : inputNameLabel.getText());
         resultCards.show(resultHost, "loading");
         statusLabel.setForeground(AMBER);
+
         statusLabel.setText("●  Đang chạy hai thuật toán…");
-        new SwingWorker<RunResult, Void>() {
+        /* DESIGN PATTERN: Template Method thông qua SwingWorker.
+         * SwingWorker quản lý trình tự: execute -> doInBackground -> done.
+         * Lớp ẩn danh cung cấp các bước cụ thể bằng cách ghi đè hai phương thức.
+         * doInBackground đọc file/chạy thuật toán/xuất file ở luồng nền;
+         * done chạy trên EDT để lấy kết quả và cập nhật các thành phần Swing.
+         * Mục đích: giữ giao diện phản hồi trong khi công việc dài đang thực hiện.
+         * Tối ưu đã áp dụng: chụp input/output một lần trên EDT trước khi chạy nền.
+         * Worker chỉ dùng các chuỗi final bên dưới, không đọc trực tiếp JTextField;
+         * người dùng sửa ô nhập trong lúc chạy không thay đổi dữ liệu của lượt này.
+         * Tên nguồn được tính một lần, dùng chung khi xuất file và tạo RunResult.
+         * Đây là cải thiện tính nhất quán/an toàn luồng; chưa đo mức tăng tốc UI.
+         */
+        final String inputText = inputField.getText().trim();
+        final String archiveDataset = selectedArchiveDataset;
+        final String outputText = outputField.getText().trim();
+        new SwingWorker<RunResult, String>() {
             @Override
             protected RunResult doInBackground() throws Exception {
-                InputData parsed = inputField.getText().isBlank()
-                        ? InputParser.parseBuiltInSample()
-                        : InputParser.parse(Path.of(inputField.getText().trim()));
+                InputData parsed;
+                if (inputText.isBlank()) parsed = InputParser.parseBuiltInSample();
+                else if (inputText.toLowerCase(Locale.ROOT).endsWith(".zip")) {
+                    parsed = ArchiveDatasetReader.read(Path.of(inputText), archiveDataset,
+                            upper, lower, message -> publish(message));
+                } else if (Path.of(inputText).getFileName().toString().equalsIgnoreCase("transactions.txt")) {
+                    try (var reader = Files.newBufferedReader(Path.of(inputText))) {
+                        Path parent = Path.of(inputText).toAbsolutePath().getParent();
+                        parsed = ArchiveDatasetReader.readTransactionsText(reader,
+                                parent == null ? "transactions" : parent.getFileName().toString(), upper, lower,
+                                message -> publish(message));
+                    }
+                } else parsed = InputParser.parse(Path.of(inputText));
                 InputData input = new InputData(upper, lower, parsed.externalUtilities(), parsed.batches());
-                ComparisonReport report = ComparisonReport.run(input);
-                Path output = outputField.getText().isBlank() ? null : Path.of(outputField.getText().trim());
+                AnalysisReport report = AnalysisReport.run(input, RescanPolicy.TIGHT, message -> publish(message));
+                Path output = outputText.isBlank() ? null : Path.of(outputText);
+                String source = inputText.isBlank() ? "Tables 2–3 · bài báo"
+                        : Path.of(inputText).getFileName().toString()
+                        + (archiveDataset == null ? "" : " · " + archiveDataset);
                 if (output != null) {
-                    String source = inputField.getText().isBlank() ? "Tables 2–3 · bài báo"
-                            : Path.of(inputField.getText().trim()).getFileName().toString();
                     ExportBundle.writeDirectory(input, report, output, source);
                 }
-                String source = inputField.getText().isBlank() ? "Tables 2–3 · bài báo"
-                        : Path.of(inputField.getText().trim()).getFileName().toString();
                 return new RunResult(report, input, output, source);
+            }
+
+            @Override
+            protected void process(List<String> messages) {
+                if (!messages.isEmpty()) statusLabel.setText("●  " + messages.get(messages.size() - 1));
             }
 
             @Override
@@ -951,30 +1006,47 @@ public final class DesktopApp extends JFrame {
 
         FileDialog picker = new FileDialog(this, "Mở tệp dữ liệu PIHAUPA", FileDialog.LOAD);
         picker.setDirectory(directory.toString());
-        picker.setFile("*.txt");
+        picker.setFile("*");
         picker.setVisible(true);
         if (picker.getFile() == null) return;
         Path selected = Path.of(picker.getDirectory(), picker.getFile()).toAbsolutePath().normalize();
-        if (!Files.isRegularFile(selected) || !selected.getFileName().toString()
-                .toLowerCase(Locale.ROOT).endsWith(".txt")) {
-            showError(new IllegalArgumentException("Hãy chọn một tệp dữ liệu .txt hiện có."));
+        String selectedName = selected.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (!Files.isRegularFile(selected) || !(selectedName.endsWith(".txt") || selectedName.endsWith(".zip"))) {
+            showError(new IllegalArgumentException("Hãy chọn một tệp dữ liệu .txt hoặc .zip hiện có."));
             return;
         }
         selectInput(selected);
     }
 
     private void selectInput(Path selected) {
+        String dataset = null;
+        if (selected.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".zip")) {
+            try {
+                List<String> names = ArchiveDatasetReader.datasetNames(selected);
+                if (names.isEmpty()) throw new IllegalArgumentException("ZIP không có bộ dữ liệu hợp lệ.");
+                dataset = (String) JOptionPane.showInputDialog(this, "Chọn một bộ dữ liệu để phân tích",
+                        "Dữ liệu trong ZIP", JOptionPane.QUESTION_MESSAGE, null,
+                        names.toArray(String[]::new), names.get(0));
+                if (dataset == null) return;
+            } catch (Exception error) {
+                showError(error);
+                return;
+            }
+        }
+        selectedArchiveDataset = dataset;
         lastRun = null;
         exportButton.setEnabled(false);
         inputField.setText(selected.toString());
         inputNameLabel.setText(ellipsis(selected.getFileName().toString(), 31));
         inputNameLabel.setToolTipText(selected.toString());
-        inputMetaLabel.setText("TXT · Tệp dữ liệu từ máy");
+        inputMetaLabel.setText(dataset == null ? "TXT · Tệp dữ liệu từ máy"
+                : "ZIP · " + dataset + " · giao dịch gốc");
         inputMetaLabel.setToolTipText(selected.toString());
         statusLabel.setText("●  Đã chọn " + selected.getFileName());
     }
 
     private void usePaperSample() {
+        selectedArchiveDataset = null;
         lastRun = null;
         exportButton.setEnabled(false);
         inputField.setText(Path.of("examples", "paper-example.txt").toString());
@@ -1035,6 +1107,13 @@ public final class DesktopApp extends JFrame {
         exportButton.setEnabled(false);
         statusLabel.setForeground(AMBER);
         statusLabel.setText("●  Đang xuất báo cáo…");
+        /* DESIGN PATTERN: Template Method cho tác vụ xuất báo cáo.
+         * SwingWorker quản lý luồng nền và gọi done trên EDT khi hoàn tất.
+         * snapshot giữ input/report/source của lượt đã chạy; destination đã được chụp.
+         * Mục đích: ghi file không chiếm luồng cập nhật giao diện.
+         * Tối ưu hiện có: dùng lại kết quả trong snapshot, không chạy mining lại
+         * cho TXT, CSV hoặc từng định dạng. Chưa đo riêng thời gian I/O xuất file.
+         */
         new SwingWorker<Void, Void>() {
             @Override protected Void doInBackground() throws Exception {
                 ExportBundle.writeDirectory(snapshot.input(), snapshot.report(), destination, snapshot.source());
@@ -1296,7 +1375,7 @@ public final class DesktopApp extends JFrame {
         });
     }
 
-    private record RunResult(ComparisonReport report, InputData input, Path output, String source) { }
+    private record RunResult(AnalysisReport report, InputData input, Path output, String source) { }
 
     private static final class RoundedPanel extends JPanel {
         private final int radius;

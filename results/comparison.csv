@@ -1,0 +1,8 @@
+metric,originalEq5,tightEq6
+rescanCount,2,1
+elapsedMs,132.728600,57.511600
+memoryDeltaMb,32.017548,22.648979
+peakMemoryMb,99.734344,122.383324
+patternsVisited,54,35
+combinedNodes,37,23
+sameFinalHaups,true,true

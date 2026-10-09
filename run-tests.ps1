@@ -10,3 +10,7 @@ java -ea -cp out piHAUPA.PiHaupaSelfTest
 if ($LASTEXITCODE -ne 0) { throw "PIHAUPA tests failed with exit code $LASTEXITCODE" }
 java -ea -cp out piHAUPA.ExportBundleTest
 if ($LASTEXITCODE -ne 0) { throw "Export tests failed with exit code $LASTEXITCODE" }
+java -ea -cp out piHAUPA.ArchiveDatasetReaderTest
+if ($LASTEXITCODE -ne 0) { throw "Archive import tests failed with exit code $LASTEXITCODE" }
+java -ea -cp out piHAUPA.LargeTextDatasetTest
+if ($LASTEXITCODE -ne 0) { throw "Large TXT tests failed with exit code $LASTEXITCODE" }

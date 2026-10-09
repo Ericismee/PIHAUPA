@@ -3,6 +3,7 @@ package piHAUPA;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,13 +14,18 @@ import java.util.concurrent.CancellationException;
 
 public final class PiHaupaMiner {
     private final Map<String, Double> externalUtilities;
+    private final boolean unitExternalUtilities;
     private final double upperThreshold;
     private final double lowerThreshold;
     private final RescanPolicy rescanPolicy;
     private final List<Transaction> allTransactions = new ArrayList<>();
     private final Map<PatternKey, PatternStat> patternTree = new LinkedHashMap<>();
     private final ManagedPatternTrie managedPatternTrie = new ManagedPatternTrie();
-    private final Set<String> transactionIds = new TreeSet<>();
+    private final Set<String> transactionIds = new HashSet<>();
+    private final Map<String, Double> globalAuub = new HashMap<>();
+
+    /** AUUB for each observed item across every processed transaction. */
+    public Map<String, Double> upperBounds() { return Map.copyOf(globalAuub); }
 
     private double totalTransactionUtility;
     private double utilityAtLastRescan;
@@ -49,7 +55,8 @@ public final class PiHaupaMiner {
                 throw new IllegalArgumentException("External utilities must be finite and positive.");
             }
         });
-        this.externalUtilities = Map.copyOf(externalUtilities);
+        this.externalUtilities = new HashMap<>(externalUtilities);
+        this.unitExternalUtilities = externalUtilities.values().stream().allMatch(value -> value == 1.0);
         this.upperThreshold = upperThreshold;
         this.lowerThreshold = lowerThreshold;
         this.rescanPolicy = Objects.requireNonNull(rescanPolicy, "rescanPolicy");
@@ -58,8 +65,25 @@ public final class PiHaupaMiner {
     public BatchResult processBatch(Batch batch) {
         checkCancelled();
         validateBatch(batch);
-        double batchTU = transactionUtility(batch.transactions());
-        double batchMU = maximumUtilitySum(batch.transactions());
+        double batchTU = 0.0;
+        double batchMU = 0.0;
+        for (Transaction transaction : batch.transactions()) {
+            checkCancelled();
+            double maximum = 0.0;
+            if (unitExternalUtilities) {
+                for (double utility : transaction.internalUtilities().values()) {
+                    batchTU += utility;
+                    maximum = Math.max(maximum, utility);
+                }
+            } else {
+                batchTU += transaction.transactionUtility(externalUtilities);
+                maximum = transaction.maximumUtility(externalUtilities);
+            }
+            batchMU += maximum;
+            for (String item : transaction.internalUtilities().keySet()) {
+                globalAuub.merge(item, maximum, Double::sum);
+            }
+        }
         totalTransactionUtilityProcessed += batchTU;
         totalMaximumUtilityProcessed += batchMU;
 
@@ -86,10 +110,17 @@ public final class PiHaupaMiner {
             denominator = tightRescanDenominator();
             limit = tightRescanLimit();
             originalLimit = originalRescanLimit();
-            // Compare the algebraically stable form of the paper's Eq. (6):
-            // MU(ID) - Su * TU(ID) >= (Su - Sl) * TU(OD).
-            // This also handles a non-positive Eq. (6) denominator without
-            // accidentally reversing the inequality during division.
+            /* Chính sách quét lại: nhánh lựa chọn bằng enum, chưa phải GoF Strategy.
+             * TIGHT kiểm tra dạng ổn định: MU(ID) - Su*TU(ID) >= (Su-Sl)*TU(OD).
+             * Dạng này tránh chia cho mẫu số không dương của Eq.(6), tránh đổi chiều
+             * bất đẳng thức sai khi chuyển sang phép chia; bằng ngưỡng vẫn quét lại.
+             * ORIGINAL dùng lượng TU đã thêm và originalLimit theo Eq.(5).
+             * Mục đích: chỉ xây lại cây khi điều kiện yêu cầu; nếu không thì cập nhật
+             * các mẫu đang quản lý. Giảm quét lại là tối ưu thuật toán, không phải
+             * lợi ích tốc độ tự động của một design pattern.
+             * rescanCount/combinedNodes thể hiện công việc thuật toán; thời gian
+             * và bộ nhớ phải đo riêng, không suy ra trực tiếp từ hai bộ đếm này.
+             */
             triggered = rescanPolicy == RescanPolicy.TIGHT
                     ? tightRescanConditionMet()
                     : insertedTransactionUtility >= originalLimit;
@@ -127,10 +158,20 @@ public final class PiHaupaMiner {
 
     private void rebuildPatternTree() {
         patternTree.clear();
+        if (allCandidatesBelowLowerBound()) {
+            managedPatternTrie.rebuild(patternTree);
+            return;
+        }
         ListNodeList globalList = constructGlobalList(allTransactions);
         restructure(globalList.nodes());
         patternExpansion(globalList.nodes(), new ArrayList<>());
         managedPatternTrie.rebuild(patternTree);
+    }
+
+    /** AU(P) cannot exceed AUUB of any item in P; this avoids materializing empty lists. */
+    private boolean allCandidatesBelowLowerBound() {
+        double lower = lowerThreshold * totalTransactionUtility;
+        return globalAuub.values().stream().noneMatch(bound -> bound >= lower);
     }
 
     private ListNodeList constructGlobalList(List<Transaction> transactions) {
@@ -138,9 +179,13 @@ public final class PiHaupaMiner {
         Map<String, Double> auub = new HashMap<>();
         for (Transaction transaction : transactions) {
             checkCancelled();
-            double mu = transaction.maximumUtility(externalUtilities);
+            double mu = unitExternalUtilities
+                    ? transaction.internalUtilities().values().stream().mapToDouble(Double::doubleValue)
+                            .max().orElse(0.0)
+                    : transaction.maximumUtility(externalUtilities);
             for (String item : transaction.internalUtilities().keySet()) {
-                double utility = transaction.utilityOf(item, externalUtilities);
+                double utility = unitExternalUtilities ? transaction.internalUtilities().get(item)
+                        : transaction.utilityOf(item, externalUtilities);
                 PiNode node = byItem.computeIfAbsent(item, PiNode::new);
                 node.sumUtility += utility;
                 node.entries.add(new PiEntry(transaction.tid(), utility, 0.0));

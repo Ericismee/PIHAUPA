@@ -5,9 +5,14 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 public record ComparisonReport(AnalysisReport original, AnalysisReport tight, boolean sameHaups) {
     public static ComparisonReport run(InputData input) {
+        return run(input, ignored -> { });
+    }
+
+    public static ComparisonReport run(InputData input, Consumer<String> progress) {
         int rows = input.batches().stream().mapToInt(batch -> batch.transactions().size()).sum();
         if (rows <= 1_000) {
             // Warm up both code paths, then use median wall-clock time from interleaved runs.
@@ -19,11 +24,11 @@ public record ComparisonReport(AnalysisReport original, AnalysisReport tight, bo
         List<AnalysisReport> tights = new ArrayList<>();
         for (int i = 0; i < repetitions; i++) {
             if ((i & 1) == 0) {
-                originals.add(AnalysisReport.run(input, RescanPolicy.ORIGINAL));
-                tights.add(AnalysisReport.run(input, RescanPolicy.TIGHT));
+                originals.add(AnalysisReport.run(input, RescanPolicy.ORIGINAL, progress));
+                tights.add(AnalysisReport.run(input, RescanPolicy.TIGHT, progress));
             } else {
-                tights.add(AnalysisReport.run(input, RescanPolicy.TIGHT));
-                originals.add(AnalysisReport.run(input, RescanPolicy.ORIGINAL));
+                tights.add(AnalysisReport.run(input, RescanPolicy.TIGHT, progress));
+                originals.add(AnalysisReport.run(input, RescanPolicy.ORIGINAL, progress));
             }
         }
         AnalysisReport original = median(originals);

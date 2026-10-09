@@ -78,6 +78,12 @@ final class ModernPathDialog extends JDialog {
     private JPanel header() {
         JPanel panel = new JPanel(new BorderLayout(16, 0));
         panel.setBackground(Color.WHITE);
+        /* DESIGN PATTERN: Static Factory của Swing (BorderFactory).
+         * Các hàm create... tạo border; createCompoundBorder ghép đường kẻ và đệm.
+         * Mục đích: dùng chung cách tạo đường viền, không tự viết logic vẽ.
+         * Tối ưu hiện có: tạo khi dựng header thay vì tạo lại lúc điều hướng.
+         * Đây là sử dụng factory của thư viện, không tự triển khai Factory Method.
+         */
         panel.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER),
                 BorderFactory.createEmptyBorder(20, 24, 20, 24)));
@@ -105,6 +111,14 @@ final class ModernPathDialog extends JDialog {
         JPanel navigation = new JPanel(new BorderLayout(10, 0));
         navigation.setOpaque(false);
         JButton parent = button("↑  Lên một cấp", false);
+        /* DESIGN PATTERN: Observer thông qua ActionListener.
+         * Nút parent phát sự kiện; lambda nhận sự kiện và gọi navigate thư mục cha.
+         * Các ô đường dẫn và nút chọn/hủy bên dưới dùng cùng cơ chế đăng ký sự kiện.
+         * Mục đích: tách hành động điều hướng/chọn file khỏi thành phần phát sự kiện.
+         * Tối ưu hiện có: mỗi listener đăng ký một lần khi tạo hộp thoại.
+         * Lưu ý: navigate còn thực hiện truy cập thư mục; ổ mạng có thể làm EDT chậm.
+         * Chưa đo độ trễ điều hướng và chưa chuyển việc duyệt thư mục sang luồng nền.
+         */
         parent.addActionListener(event -> {
             if (currentDirectory != null && currentDirectory.getParent() != null)
                 navigate(currentDirectory.getParent());

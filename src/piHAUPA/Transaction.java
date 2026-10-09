@@ -34,11 +34,23 @@ public final class Transaction {
     }
 
     public double transactionUtility(Map<String, Double> externalUtilities) {
-        return internalUtilities.keySet().stream().mapToDouble(item -> utilityOf(item, externalUtilities)).sum();
+        double total = 0.0;
+        for (Map.Entry<String, Double> item : internalUtilities.entrySet()) {
+            Double external = externalUtilities.get(item.getKey());
+            if (external == null) throw new IllegalArgumentException("Missing external utility for item " + item.getKey());
+            total += item.getValue() * external;
+        }
+        return total;
     }
 
     public double maximumUtility(Map<String, Double> externalUtilities) {
-        return internalUtilities.keySet().stream().mapToDouble(item -> utilityOf(item, externalUtilities)).max().orElse(0.0);
+        double maximum = 0.0;
+        for (Map.Entry<String, Double> item : internalUtilities.entrySet()) {
+            Double external = externalUtilities.get(item.getKey());
+            if (external == null) throw new IllegalArgumentException("Missing external utility for item " + item.getKey());
+            maximum = Math.max(maximum, item.getValue() * external);
+        }
+        return maximum;
     }
 }
 

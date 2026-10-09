@@ -4,15 +4,15 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Phân tích PIHAUPA và so sánh tight re-scan với điều kiện cũ.">
-    <title>PIHAUPA Laboratory</title>
+    <meta name="description" content="Theo dõi từng bước tính và kết quả PIHAUPA Tight.">
+    <title>PIHAUPA</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23081421'/%3E%3Cpath d='M16 46V19h18c10 0 16 5 16 13s-6 13-16 13H26v-8h8c4 0 6-2 6-5s-2-5-6-5h-8v19z' fill='%2327d3b2'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="/styles.css">
     <style>
         [hidden] {
             display: none!important
         }
-
+        
         .summary-grid {
             grid-template-columns: repeat(auto-fit, minmax(175px, 1fr))
         }
@@ -20,111 +20,348 @@
 </head>
 
 <body>
-    <header class="topbar">
-        <div class="brand"><span class="brand-mark">P</span>
-            <div><strong>PIHAUPA</strong><small>Algorithm Laboratory</small></div>
+    <header class="site-header">
+        <div class="header-inner">
+            <div class="brand" aria-label="PIHAUPA · Phòng thí nghiệm thuật toán"><span class="brand-mark">P</span>
+                <div><strong>PIHAUPA</strong></div>
+            </div>
+            <nav class="main-nav" aria-label="Các phần phân tích">
+                <button class="nav-tab active" data-view="overview"><span>01</span> Tổng quan</button>
+                <button class="nav-tab" data-view="steps"><span>02</span> Từng bước</button>
+                <button class="nav-tab" data-view="diagram"><span>03</span> Sơ đồ</button>
+                <button class="nav-tab" data-view="patterns"><span>04</span> Kết quả</button>
+                <button class="nav-tab" data-view="resources"><span>05</span> Tài nguyên</button>
+                <button class="nav-tab" data-view="datasets"><span>06</span> Dữ liệu lớn</button>
+                <button class="nav-tab" data-view="glossary"><span>07</span> Thuật ngữ</button>
+            </nav>
+            <p class="paper-tag">Java nâng cao <span>· Nhóm 3</span></p>
         </div>
-        <div class="paper-tag">Kim et al. · Journal of Big Data · 2026</div>
     </header>
 
     <main class="workspace">
-        <aside class="controls panel">
-            <div class="section-heading"><span>01</span>
+        <section class="controls panel" id="standardControls" aria-labelledby="setupTitle">
+            <div class="toolbar-heading"><span>THIẾT LẬP</span>
+                <h1 id="setupTitle">Cấu hình lượt chạy</h1>
+            </div>
+            <div class="toolbar-grid">
+                <div class="toolbar-source">
+                    <div class="toolbar-label">Dữ liệu đầu vào</div>
+                    <div class="file-picker"><input id="fileInput" type="file" accept=".txt,text/plain" hidden><button class="choose-file-button" id="chooseFileButton" type="button" title="Chọn tệp TXT">Chọn tệp</button><span id="fileName" title="Dữ liệu đang dùng">paper-example.txt</span></div>
+                    <button class="button secondary" id="sampleButton" type="button">Dùng dữ liệu bài báo</button>
+                </div>
+                <div class="toolbar-thresholds">
+                    <div class="toolbar-label">Ngưỡng phân loại</div>
+                    <div class="field-grid"><label><span>Upper · Su</span><input id="su" type="number" value="0.23" min="0.000001" max="1" step="any"></label><label><span>Lower · Sl</span><input id="sl" type="number" value="0.10" min="0.000001" max="1" step="any"></label></div>
+                </div>
+                <div class="toolbar-submit">
+                    <div class="toolbar-label">Thực thi</div>
+                    <button class="button primary" id="runButton" type="button"><span>Chạy PIHAUPA</span><b>→</b></button>
+                    <div class="status" id="status" data-kind="idle"><i></i><span>Sẵn sàng phân tích</span></div>
+                </div>
+                <div class="toolbar-export export-area">
+                    <div class="toolbar-label">Báo cáo</div>
+                    <div class="export-buttons"><button class="button export-button" id="exportTxtButton" type="button" disabled>↓ TXT</button><button class="button export-button" id="exportCsvButton" type="button" disabled>↓ CSV</button></div>
+                </div>
+            </div>
+            <details class="toolbar-details">
+                <summary>Giải thích ngưỡng và điều kiện Tight re-scan · Eq.(12)</summary>
                 <div>
-                    <h1>Cấu hình phân tích</h1>
-                    <p>Dữ liệu định lượng theo batch</p>
-                </div>
+                    <p>Nhập tỷ lệ từ 0 đến 1. Upper = Su × TU(DB); Lower = Sl × TU(DB).</p><code>MU(ID) − Su×TU(ID) ≥ (Su−Sl)×TU(OD)</code></div>
+            </details>
+            <div class="archive-progress" id="archiveProgress" hidden><strong>Tiến trình đọc dữ liệu</strong>
+                <div id="archiveProgressText">Chưa bắt đầu</div>
             </div>
-            <div class="file-picker">
-                <input id="fileInput" type="file" accept=".txt,text/plain" hidden>
-                <button class="choose-file-button" id="chooseFileButton" type="button" title="Chọn tệp TXT, tối đa 20 MB">Chọn tệp</button>
-                <span id="fileName" title="Dữ liệu đang dùng">paper-example.txt</span>
-            </div>
-            <button class="button secondary full" id="sampleButton">Dữ liệu bài báo</button>
-
-            <div class="field-grid">
-                <label><span>Upper threshold · Su</span><input id="su" type="number" value="0.23" min="0.000001" max="1" step="0.01"></label>
-                <label><span>Lower threshold · Sl</span><input id="sl" type="number" value="0.10" min="0.000001" max="1" step="0.01"></label>
-            </div>
-            <div class="formula">
-                <span>Tight re-scan · Eq.(12)</span>
-                <code>MU(ID) − Su×TU(ID) ≥ (Su−Sl)×TU(OD)</code>
-            </div>
-            <button class="button primary full" id="runButton"><span>Chạy và so sánh</span><b>→</b></button>
-            <div class="status" id="status" data-kind="idle"><i></i><span>Sẵn sàng phân tích</span></div>
-            <div class="export-area">
-                <div class="export-buttons">
-                    <button class="button export-button" id="exportTxtButton" disabled>↓ &nbsp; Xuất TXT</button>
-                    <button class="button export-button" id="exportCsvButton" disabled>↓ &nbsp; Xuất CSV</button>
-                </div>
-
-            </div>
-        </aside>
+        </section>
 
         <section class="results">
-            <div class="empty panel" id="emptyState">
-                <div class="empty-orbit"><span>AU</span></div>
-                <h2>Kết quả sẽ xuất hiện tại đây</h2>
-                <p>Chọn file hoặc dùng bộ dữ liệu bài báo, sau đó chạy để xem mẫu, điều kiện re-scan và mức sử dụng tài nguyên.</p>
-            </div>
+            <header class="page-intro" id="viewIntro" aria-live="polite">
+                <div class="page-kicker" id="viewKicker">01 / TỔNG QUAN</div>
+                <h2 id="viewTitle">Kết luận của lượt phân tích</h2>
+                <p id="viewDescription">Đọc kết luận trước, sau đó đối chiếu ngưỡng, từng batch và chi phí xử lý.</p>
+            </header>
+            <div class="reading-guide" id="readingGuide" aria-label="Thứ tự đọc báo cáo"></div>
+            <section class="panel glossary-panel" id="glossaryPanel" hidden aria-labelledby="glossaryTitle">
+                <div class="glossary-heading"><div><span class="eyebrow">TỪ ĐIỂN BÀI BÁO</span><h2 id="glossaryTitle">Ký hiệu và thuật ngữ PIHAUPA</h2><p>Tra từ ký hiệu sang ý nghĩa, công thức và vị trí của nó trong luồng thuật toán. Có thể xem trước khi chạy dữ liệu.</p></div><a href="https://link.springer.com/article/10.1186/s40537-025-01352-x" target="_blank" rel="noopener noreferrer">Bài báo gốc ↗</a></div>
+                <div class="glossary-map" aria-label="Liên hệ giữa các nhóm thuật ngữ"><div><small>GIAO DỊCH</small><strong>IU × EU → U(i,T)</strong><span>Tiện ích của từng item</span></div><b aria-hidden="true">→</b><div><small>GỘP DỮ LIỆU</small><strong>TU · MU · AUUB</strong><span>Tổng, cực đại, cận trên</span></div><b aria-hidden="true">→</b><div><small>KHAI PHÁ</small><strong>GL → PT</strong><span>PIHAUP-List và pattern tree</span></div><b aria-hidden="true">→</b><div><small>KẾT QUẢ</small><strong>AU(P) → LARGE / PRE-LARGE</strong><span>So với S_u, S_l × TU(DB)</span></div></div>
+                <div class="glossary-example"><strong>Ví dụ Tables 2–3, DB1</strong><span>TU(OD) = 141 · TU(ID) = 32 · MU(ID) = 24 · S_u = 0,23 · S_l = 0,10</span><span>Eq. (12): <b>24 − 0,23×32 = 16,64 &lt; (0,23−0,10)×141 = 18,33</b> → không re-scan.</span></div>
+                <div class="glossary-tools"><label for="glossarySearch">Tìm ký hiệu hoặc tên<input id="glossarySearch" type="search" placeholder="Ví dụ: MU(ID), pre-large, cận trên…" autocomplete="off"></label><div id="glossaryFilters" class="glossary-filters" role="group" aria-label="Lọc nhóm thuật ngữ"></div></div>
+                <p id="glossaryCount" class="glossary-count" aria-live="polite"></p><div id="glossaryList"></div>
+                <p class="glossary-source">Nguồn đối chiếu: Table 4 (tr. 9), Definitions 1–3 và Eq. (1)–(12), Fig. 1–7, Algorithms 1–2 của bài báo. Những số đo riêng của ứng dụng được gắn nhãn riêng, không xem là ký hiệu do bài báo định nghĩa.</p>
+            </section>
+            <div class="report-context" id="reportContext" hidden>
+                <div><strong>Đang xem kết quả dữ liệu lớn</strong><span id="reportContextText"></span></div><button class="button export-button" id="returnStandardButton" type="button">Về cấu hình lượt chạy thường</button></div>
+            <section class="panel large-data" id="largeData" hidden>
+                <div class="panel-title">
+                    <div><span>DATA</span>
+                        <h2>Thực nghiệm dữ liệu lớn</h2>
+                    </div>
+                </div>
+                <p class="section-lead">Chọn tệp <code>transactions.txt</code> hoặc thư mục đã giải nén. Mỗi bộ chạy độc lập với Su/Sl riêng; không cần tải tệp ZIP.</p>
+                <div class="large-actions"><input id="folderInput" type="file" webkitdirectory multiple hidden><input id="largeFileInput" type="file" accept=".txt,text/plain" multiple hidden><button class="button secondary" id="folderButton" type="button">Chọn thư mục</button>
+                    <button class="button secondary" id="largeFileButton" type="button">Chọn tệp TXT</button>
+                </div>
+                <div class="large-picker"><label for="largeDatasetSelect">Bộ dữ liệu</label><select id="largeDatasetSelect"></select></div>
+                <label class="dataset-name-field"><span>Tên hiển thị của bộ dữ liệu (khi chọn TXT riêng)</span><input id="datasetName" type="text" placeholder="Ví dụ: Chainstore" maxlength="80"></label>
+                <div class="large-config">
+                    <div class="large-config-heading"><strong>Ngưỡng cho dữ liệu lớn</strong><span>0 &lt; Sl &lt; Su ≤ 1 · thay đổi cho từng lượt chạy</span></div>
+                    <div class="large-config-fields"><label for="largeSu">Upper · Su<input id="largeSu" type="number" value="0.23" min="0.000001" max="1" step="any"></label><label for="largeSl">Lower · Sl<input id="largeSl" type="number" value="0.10" min="0.000001" max="1" step="any"></label></div>
+                    <div class="large-run-actions"><button class="button primary" id="runLargeButton" type="button" disabled>Chạy PIHAUPA →</button><button class="button export-button" id="largeExportTxtButton" type="button" disabled>↓ Xuất TXT</button><button class="button export-button"
+                            id="largeExportCsvButton" type="button" disabled>↓ Xuất CSV</button></div>
+                    <div class="status" id="largeStatus" data-kind="idle"><i></i><span>Chọn tệp giao dịch để bắt đầu.</span></div>
+                </div>
+                <p class="archive-note" id="largeSourceNote">Chưa chọn dữ liệu. Có thể chỉnh Su/Sl riêng cho từng lần chạy.</p>
+                <div class="large-data-guide"><strong>Cách chương trình hiểu tệp giao dịch</strong>
+                    <p>Mỗi dòng có dạng <code>danh sách item : TU : danh sách utility tương ứng</code>. Utility của item đã nằm trong tệp nên dùng EU = 1, không nhân thêm một lần nữa. Chương trình đối chiếu TU từng dòng với tổng utility item theo sai số
+                        cho phép; nếu lệch quá mức sẽ dừng và báo lỗi. Dữ liệu được chia theo thứ tự gốc thành DB0 / DB1 / DB2 ≈ 80% / 10% / 10% để mô phỏng cập nhật.</p>
+                </div>
+                <div class="large-placeholder" id="largePlaceholder" aria-label="Bố cục kết quả dữ liệu lớn trước khi chạy">
+                    <div class="skeleton-heading"><b>ĐẦU RA</b><span>Kết quả sẽ được điền vào đây</span></div>
+                    <div class="skeleton-metrics">
+                        <article class="skeleton-panel"><span>Giao dịch / item</span><i class="skeleton-line w-45 tall"></i><i class="skeleton-line w-70"></i></article>
+                        <article class="skeleton-panel"><span>HAUP / PRE-LARGE</span><i class="skeleton-line w-45 tall"></i><i class="skeleton-line w-70"></i></article>
+                        <article class="skeleton-panel"><span>Thời gian / heap</span><i class="skeleton-line w-45 tall"></i><i class="skeleton-line w-70"></i></article>
+                    </div>
+                    <div class="skeleton-surface skeleton-feature"><i class="skeleton-line w-55"></i><i class="skeleton-line w-90"></i></div>
+                </div>
+                <div id="largeDetail"></div>
+                <section class="large-optimization" id="largeOptimization" hidden>
+                    <h3>Hướng tối ưu từ lượt chạy này</h3>
+                    <div id="largeOptimizationAdvice"></div>
+                </section>
+                <div id="largeHistory"></div>
+                <details class="archive-log">
+                    <summary>Log tiến trình</summary><pre id="largeLog"></pre></details>
+            </section>
+            <section class="panel archive-results" id="archiveResults" hidden>
+                <div class="panel-title">
+                    <div><span>ZIP</span>
+                        <h2>Đối chiếu 6 bộ dữ liệu</h2>
+                    </div>
+                </div>
+                <p class="archive-note">Đọc trực tiếp transactions.txt và investment_table.txt. Tiện ích item lấy từ giao dịch (EU=1); bảng investment là metadata, không thay cho external utility.</p>
+                <div class="archive-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Bộ dữ liệu</th>
+                                <th>Giao dịch</th>
+                                <th>Item</th>
+                                <th>TU sai</th>
+                                <th>TU tổng</th>
+                                <th>MU tổng</th>
+                                <th>AUUB lớn nhất</th>
+                                <th>Su × TU</th>
+                                <th>Kết luận HAUP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="archiveTable"></tbody>
+                    </table>
+                </div>
+                <p class="archive-note" id="archiveConclusion"></p>
+                <div class="archive-charts" id="archiveCharts"></div>
+                <div class="archive-actions"><label for="datasetSelect">Phân tích PIHAUPA theo từng bộ</label><select id="datasetSelect"></select><button class="button primary" id="analyzeDatasetButton" type="button">Chạy bộ đã chọn →</button></div>
+                <div class="dataset-detail" id="datasetDetail"></div>
+                <details class="archive-log">
+                    <summary>Log tiến trình</summary><pre id="archiveLog"></pre></details>
+            </section>
+            <section class="empty" id="emptyState" aria-labelledby="emptyTitle" data-view="overview">
+                <div class="empty-toolbar panel">
+                    <div class="empty-intro"><span class="empty-eyebrow" id="emptyStateLabel">CHƯA CÓ KẾT QUẢ</span>
+                        <h2 id="emptyTitle">Chưa có kết quả phân tích</h2>
+                        <p id="emptyMessage">Chạy dữ liệu đã chọn để xem số liệu trong các khung bên dưới.</p>
+                    </div>
+                    <div class="empty-selected"><span>DỮ LIỆU / NGƯỠNG</span><strong id="emptySource">paper-example.txt</strong><small id="emptyThreshold">Su 0,23 · Sl 0,10</small></div>
+                    <div class="empty-actions"><button class="button primary" id="emptyRunButton" type="button">Chạy phân tích <b>→</b></button><button class="button export-button" id="emptyChooseButton" type="button">Chọn tệp TXT</button></div>
+                </div>
+                <div class="skeleton-view skeleton-overview" aria-label="Bố cục tổng quan trước khi chạy">
+                    <article class="skeleton-panel panel">
+                        <div class="skeleton-heading"><b>01</b><span>Kết luận và căn cứ</span><em>Số liệu xuất hiện sau khi chạy</em></div>
+                        <div class="skeleton-surface skeleton-feature"><i class="skeleton-line w-55"></i><i class="skeleton-line w-90"></i><i class="skeleton-line w-70"></i></div>
+                    </article>
+                    <div class="skeleton-metrics">
+                        <article class="skeleton-panel panel"><span>Giao dịch</span><i class="skeleton-line w-45 tall"></i><i class="skeleton-line w-70"></i></article>
+                        <article class="skeleton-panel panel"><span>HAUP cuối</span><i class="skeleton-line w-45 tall"></i><i class="skeleton-line w-70"></i></article>
+                        <article class="skeleton-panel panel"><span>PRE-LARGE</span><i class="skeleton-line w-45 tall"></i><i class="skeleton-line w-70"></i></article>
+                    </div>
+                    <article class="skeleton-panel panel">
+                        <div class="skeleton-heading"><b>02</b><span>Phương pháp và tài nguyên</span></div>
+                        <div class="skeleton-columns">
+                            <div><i class="skeleton-line w-90"></i><i class="skeleton-line w-75"></i><i class="skeleton-line w-55"></i></div>
+                            <div><i class="skeleton-line w-75"></i><i class="skeleton-line w-90"></i><i class="skeleton-line w-55"></i></div>
+                        </div>
+                    </article>
+                </div>
+                <div class="skeleton-view skeleton-steps" aria-label="Bố cục phép tính trước khi chạy">
+                    <article class="skeleton-panel panel">
+                        <div class="skeleton-heading"><b>01</b><span>Dữ liệu và các batch</span></div>
+                        <div class="skeleton-batches"><i></i><i></i><i></i></div>
+                    </article>
+                    <article class="skeleton-panel panel">
+                        <div class="skeleton-heading"><b>02</b><span>Phép tính Bước 1–5</span><em>Chọn DB để xem số thế vào công thức</em></div>
+                        <div class="skeleton-steps-list">
+                            <div>Bước 1 · Đầu vào <i class="skeleton-line w-70"></i></div>
+                            <div>Bước 2 · TU và ngưỡng <i class="skeleton-line w-55"></i></div>
+                            <div>Bước 3 · Re-scan <i class="skeleton-line w-75"></i></div>
+                            <div>Bước 4 · Cận trên và khai phá <i class="skeleton-line w-55"></i></div>
+                            <div>Bước 5 · Phân loại <i class="skeleton-line w-70"></i></div>
+                        </div>
+                    </article>
+                </div>
+                <div class="skeleton-view skeleton-patterns" aria-label="Bố cục kết quả trước khi chạy">
+                    <article class="skeleton-panel panel">
+                        <div class="skeleton-heading"><b>01</b><span>Đối chiếu Upper / Lower / AUUB</span></div>
+                        <div class="skeleton-surface skeleton-feature"><i class="skeleton-line w-55"></i><i class="skeleton-line w-90"></i></div>
+                    </article>
+                    <article class="skeleton-panel panel">
+                        <div class="skeleton-heading"><b>02</b><span>Mẫu và phép tính AU</span></div>
+                        <div class="skeleton-table">
+                            <div>Mẫu <span>Phân loại</span><span>AU</span></div><i></i><i></i><i></i></div>
+                    </article>
+                </div>
+                <div class="skeleton-view skeleton-diagram" aria-label="Bố cục sơ đồ trước khi chạy">
+                    <article class="skeleton-panel panel">
+                        <div class="skeleton-heading"><b>03</b><span>Luồng re-scan và cây mẫu</span><em>Chạy phân tích để điền số liệu theo DB</em></div>
+                        <div class="skeleton-columns"><div><i class="skeleton-line w-70"></i><i class="skeleton-line w-90"></i></div><div><i class="skeleton-line w-55"></i><i class="skeleton-line w-75"></i></div></div>
+                    </article>
+                </div>
+                <div class="skeleton-view skeleton-resources" aria-label="Bố cục tài nguyên trước khi chạy">
+                    <article class="skeleton-panel panel">
+                        <div class="skeleton-heading"><b>01</b><span>Chi phí của lượt phân tích</span><em>Số đo sẽ xuất hiện sau khi chạy</em></div>
+                        <div class="skeleton-metrics">
+                            <div><span>Tổng thời gian server</span><i class="skeleton-line w-55 tall"></i></div>
+                            <div><span>Heap Java quan sát</span><i class="skeleton-line w-55 tall"></i></div>
+                        </div>
+                    </article>
+                    <article class="skeleton-panel panel">
+                        <div class="skeleton-heading"><b>02</b><span>Thời gian theo giai đoạn</span></div>
+                        <div class="skeleton-steps-list">
+                            <div>Bước 1 · Đọc dữ liệu <i class="skeleton-line w-70"></i></div>
+                            <div>Bước 2 · Chạy PIHAUPA <i class="skeleton-line w-55"></i></div>
+                            <div>Bước 3 · Chuẩn bị kết quả <i class="skeleton-line w-75"></i></div>
+                        </div>
+                    </article>
+                </div>
+            </section>
 
             <div id="dashboard" hidden>
-                <div class="summary-grid" id="summaryCards"></div>
-
-                <section class="comparison panel">
+                <section class="panel insight-panel" id="overviewInsight">
                     <div class="panel-title">
-                        <div><span>02</span>
-                            <h2>So sánh thuật toán</h2>
+                        <div><span>!</span>
+                            <h2>Kết luận nhanh</h2>
                         </div>
-                        <div class="equivalence" id="equivalence"></div>
                     </div>
-                    <div class="compare-table-wrap">
-                        <table class="compare-table">
-                            <thead>
-                                <tr>
-                                    <th>Chỉ số</th>
-                                    <th>Original Eq.(5)</th>
-                                    <th>Tight Eq.(6)</th>
-                                    <th>Thay đổi</th>
-                                </tr>
-                            </thead>
-                            <tbody id="comparisonBody"></tbody>
-                        </table>
-                    </div>
+                    <div id="overviewVerdict"></div>
                 </section>
-
+                <div class="summary-grid" id="summaryCards"></div>
+                <section class="panel numbers-panel" id="numbersPanel">
+                    <div class="panel-title">
+                        <div><span>01</span>
+                            <h2>Bảng đối chiếu số liệu</h2>
+                        </div>
+                    </div>
+                    <p class="section-lead">Mỗi hàng ghi nguồn số, phép tính và cách hiểu. Dấu “0” ở mẫu duyệt không có nghĩa là chưa đọc giao dịch.</p>
+                    <div id="numbersTable"></div>
+                </section>
+                <section class="panel flow-panel" id="flowPanel">
+                    <div class="panel-title">
+                        <div><span>1–5</span>
+                            <h2>Phương pháp: từ dữ liệu đến kết luận</h2>
+                        </div>
+                    </div>
+                    <p class="section-lead">Năm bước dưới đây nối dữ liệu đầu vào với kết quả cuối. Tab “Phép tính theo batch” trình bày phép thế số cho từng DB.</p>
+                    <div class="flow-grid" id="flowGrid"></div>
+                </section>
+                <section class="panel method-panel" id="methodPanel">
+                    <div class="panel-title">
+                        <div><span>KÝ HIỆU</span>
+                            <h2>Cách đọc công thức trong báo cáo</h2>
+                        </div>
+                    </div>
+                    <dl class="term-grid">
+                        <div><dt>IU · EU · U(i,T)</dt>
+                            <dd>Số lượng trong giao dịch × tiện ích ngoài của item = tiện ích item ở giao dịch đó.</dd>
+                        </div>
+                        <div><dt>TU(T) · TU(DB)</dt>
+                            <dd>Tổng tiện ích của một giao dịch; cộng các giao dịch để có tổng tiện ích cơ sở dữ liệu.</dd>
+                        </div>
+                        <div><dt>MU(T) · AUUB</dt>
+                            <dd>MU là tiện ích item lớn nhất trong giao dịch. AUUB dùng MU để tạo cận trên, giúp loại nhánh không thể đạt ngưỡng.</dd>
+                        </div>
+                        <div><dt>AU(P) · LARGE · PRE-LARGE</dt>
+                            <dd>AU = sumU(P) / số item. So với Upper và Lower để phân loại mẫu ở batch đang xét.</dd>
+                        </div>
+                    </dl>
+                    <p class="method-note">DB0 là lần quét khởi tạo. Với batch mới, điều kiện Tight Eq.(12) quyết định có cần re-scan. Đây là diễn giải số liệu của lượt chạy, không thay thế chứng minh đầy đủ trong bài báo. <button class="inline-term-link" type="button" data-open-glossary>Xem toàn bộ thuật ngữ ↗</button></p>
+                </section>
+                <section class="panel resource-panel" id="resourcePanel">
+                    <div class="panel-title">
+                        <div><span>ĐO</span>
+                            <h2>Thời gian và tài nguyên</h2>
+                        </div>
+                    </div>
+                    <p class="section-lead">Các số đo lấy từ lần chạy này trên server Java; không phải số liệu cố định của bài báo.</p>
+                    <div id="resourceMetrics"></div>
+                </section>
+                <section class="panel optimization-panel" id="optimizationPanel">
+                    <div class="panel-title">
+                        <div><span>→</span>
+                            <h2>Hướng tối ưu web</h2>
+                        </div>
+                    </div>
+                    <div id="optimizationAdvice"></div>
+                </section>
                 <section class="panel batches-panel">
                     <div class="panel-title">
-                        <div><span>03</span>
-                            <h2>Diễn tiến theo batch</h2>
+                        <div><span>01</span>
+                            <h2>Diễn biến theo batch</h2>
                         </div>
                         <div class="legend"><i class="large-dot"></i>LARGE <i class="pre-dot"></i>PRE-LARGE</div>
                     </div>
+                    <p class="section-lead">Đọc từ DB0 đến batch cuối. Mỗi bước ghi công thức, số đã thế và quyết định tương ứng.</p>
+                    <details class="input-preview" open>
+                        <summary>Dữ liệu đã đọc · EU và giao dịch mẫu</summary>
+                        <div id="inputPreview"></div>
+                    </details>
+                    <div class="batch-overview" id="batchOverview"></div>
                     <div class="batch-tabs" id="batchTabs" role="tablist"></div>
                     <div id="batchDetail"></div>
                 </section>
 
+                <section class="panel diagram-panel" id="diagramPanel" hidden>
+                    <div class="panel-title"><div><span>03</span><h2>Dữ liệu mới làm thay đổi gì?</h2></div></div>
+                    <p class="section-lead">Chọn DB để xem original database (OD), incremental database (ID), Tight Re-Scan Condition và các mẫu LARGE/PRE-LARGE trước → sau batch. <button class="inline-term-link" type="button" data-open-glossary>Xem nghĩa ký hiệu ↗</button></p>
+                    <div class="batch-tabs" id="diagramBatchTabs" role="tablist" aria-label="Chọn batch cho sơ đồ"></div>
+                    <div id="diagramSummary"></div>
+                    <div id="diagramFlow"></div>
+                    <section class="diagram-change-section" id="diagramChangeSection"><div class="diagram-tree-heading"><div><h3>Mẫu LARGE/PRE-LARGE thay đổi thế nào?</h3><p>Đối chiếu AU và phân loại trước → sau. Mẫu không còn được báo cáo không đồng nghĩa đã rời pattern tree (PT).</p></div></div><div id="diagramTransitions"></div></section>
+                    <details class="diagram-tree-disclosure" id="diagramTreeDisclosure"><summary><span><b>Bản đồ tra cứu mẫu</b><small>Nhóm kết quả theo item đầu để tìm mẫu và kiểm tra AU; đây không phải pattern tree (PT) nội bộ.</small></span><span class="diagram-disclosure-action"><span class="when-closed">Mở sơ đồ ↓</span><span class="when-open">Thu gọn ↑</span></span></summary><div class="diagram-legend"><span><i class="large-dot"></i> LARGE</span><span><i class="pre-dot"></i> PRE-LARGE</span></div><div class="diagram-explorer"><div id="diagramTree"></div><div id="diagramPatternDetail" aria-live="polite"></div></div></details>
+                </section>
+
                 <section class="panel patterns-panel">
                     <div class="panel-title">
-                        <div><span>04</span>
+                        <div><span>02</span>
                             <h2>Mẫu cuối cùng</h2>
                         </div>
                         <div class="filter-group"><button class="filter active" data-filter="ALL">Tất cả</button><button class="filter" data-filter="LARGE">LARGE</button><button class="filter" data-filter="PRE_LARGE">PRE-LARGE</button></div>
                     </div>
+                    <p class="section-lead">Danh sách cuối của lượt chạy tại ngưỡng đã chọn. Ví dụ bên dưới cho thấy cách tính AU và đối chiếu với Upper/Lower.</p>
+                    <div id="patternVerdict"></div>
+                    <div id="patternExample"></div>
                     <div class="pattern-table-wrap">
                         <table class="pattern-table">
                             <thead>
                                 <tr>
                                     <th>Mẫu</th>
                                     <th>Phân loại</th>
-                                    <th>AU</th>
-                                    <th>Sum utility</th>
+                                    <th>AU = sumU / |P|</th>
+                                    <th>sumU</th>
                                     <th>Độ dài</th>
                                 </tr>
                             </thead>
                             <tbody id="patternBody"></tbody>
                         </table>
                     </div>
+                    <div class="pattern-pager" id="patternPager"></div>
                 </section>
             </div>
         </section>

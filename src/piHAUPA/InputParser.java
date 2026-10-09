@@ -1,6 +1,8 @@
 package piHAUPA;
 
 import java.io.IOException;
+import java.io.BufferedReader;
+import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -18,6 +20,12 @@ public final class InputParser {
         try (Stream<String> lines = Files.lines(path)) {
             return parseLines(lines::iterator);
         }
+    }
+
+    public static InputData parse(Reader reader) {
+        BufferedReader buffered = reader instanceof BufferedReader
+                ? (BufferedReader) reader : new BufferedReader(reader);
+        return parseLines(buffered.lines()::iterator);
     }
 
     public static InputData parseText(String text) {

@@ -2,8 +2,11 @@ package piHAUPA;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Comparator;
 import java.util.Locale;
 import java.util.concurrent.CancellationException;
+import java.util.function.Consumer;
 
 public record AnalysisReport(
         double upperThreshold,
@@ -16,13 +19,31 @@ public record AnalysisReport(
         long peakMemoryBytes,
         MiningStats stats,
         List<BatchView> batches,
+        Map<String, Double> upperBounds,
         List<PatternResult> managedPatterns) {
 
     public static AnalysisReport run(InputData input) {
         return run(input, RescanPolicy.TIGHT);
     }
 
+    /**
+     * DESIGN PATTERN: phương thức này đóng vai trò Facade cho luồng phân tích.
+     * Bên gọi chỉ đưa InputData và RescanPolicy, nhận lại AnalysisReport;
+     * không cần tự khởi tạo miner, duyệt batch hay thu thập thống kê.
+     * Bên trong: tạo miner -> xử lý từng batch -> đo tài nguyên -> tổng hợp báo cáo.
+     * Mục đích: Desktop, CLI và Web dùng chung một quy trình, giảm mã lặp.
+     * Tối ưu hiện có: giữ một miner xuyên suốt các batch trong cùng lượt để khai phá
+     * tăng dần; mỗi lượt độc lập có miner riêng, không chia sẻ trạng thái thay đổi.
+     * elapsedNanos đo phần xử lý trong run, không gồm đọc input hay render giao diện.
+     * Heap được lấy mẫu trước/sau batch; peakMemoryBytes là đỉnh quan sát được,
+     * không phải đỉnh bộ nhớ chính xác của JVM hoặc RSS của toàn tiến trình.
+     * Facade giúp tổ chức mã; hiệu quả giảm re-scan thuộc thuật toán PIHAUPA.
+     */
     public static AnalysisReport run(InputData input, RescanPolicy policy) {
+        return run(input, policy, ignored -> { });
+    }
+
+    public static AnalysisReport run(InputData input, RescanPolicy policy, Consumer<String> progress) {
         PiHaupaMiner miner = new PiHaupaMiner(input.externalUtilities(), input.upperThreshold(),
                 input.lowerThreshold(), policy);
         long baselineMemory = usedMemory();
@@ -37,6 +58,8 @@ public record AnalysisReport(
                 throw new CancellationException("PIHAUPA analysis cancelled.");
             }
             transactionCount += batch.transactions().size();
+            progress.accept(policy + ": bắt đầu " + batch.name() + " (" + transactionCount
+                    + " giao dịch tích lũy)");
             long memoryBefore = usedMemory();
             long batchStarted = System.nanoTime();
             BatchResult result = miner.processBatch(batch);
@@ -45,6 +68,9 @@ public record AnalysisReport(
             peakMemory = Math.max(peakMemory, Math.max(memoryBefore, memoryAfter));
             batchViews.add(BatchView.from(index++, batch, result, batchElapsed, transactionCount,
                     memoryBefore, memoryAfter, peakMemory));
+            progress.accept(policy + ": xong " + batch.name() + ", " + result.action()
+                    + ", LARGE=" + result.largePatterns().size()
+                    + ", PRE-LARGE=" + result.preLargePatterns().size());
         }
 
         long elapsed = System.nanoTime() - started;
@@ -53,6 +79,7 @@ public record AnalysisReport(
         long memoryDelta = Math.max(0L, finalMemory - baselineMemory);
         return new AnalysisReport(input.upperThreshold(), input.lowerThreshold(), policy, input.batches().size(),
                 transactionCount, elapsed, memoryDelta, peakMemory, miner.stats(), batchViews,
+                miner.upperBounds(),
                 miner.managedPatterns());
     }
 
@@ -78,6 +105,11 @@ public record AnalysisReport(
         for (BatchView batch : batches) {
             batch.writeJson(json);
         }
+        json.endArray().name("upperBounds").beginArray();
+        upperBounds.entrySet().stream().sorted(Map.Entry.<String, Double>comparingByValue(
+                Comparator.reverseOrder()).thenComparing(Map.Entry.comparingByKey()))
+                .forEach(entry -> json.beginObject().string("item", entry.getKey())
+                        .number("auub", entry.getValue()).endObject());
         json.endArray().name("managedPatterns").beginArray();
         for (PatternResult pattern : managedPatterns) {
             writePattern(json, pattern);

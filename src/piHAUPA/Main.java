@@ -16,15 +16,36 @@ public final class Main {
             return;
         }
 
+        if (options.auditArchive != null) {
+            double su = Double.isNaN(options.upperThreshold) ? 0.23 : options.upperThreshold;
+            double sl = Double.isNaN(options.lowerThreshold) ? 0.10 : options.lowerThreshold;
+            if (!(sl > 0 && sl < su && su <= 1))
+                throw new IllegalArgumentException("Cần 0 < Sl < Su ≤ 1.");
+            System.out.println("Kiểm tra 6 bộ dữ liệu trong " + options.auditArchive);
+            for (ArchiveDatasetReader.DatasetAudit audit : ArchiveDatasetReader.inspect(
+                    options.auditArchive, System.out::println)) {
+                System.out.printf(Locale.US,
+                        "%s: rows=%d items=%d investmentRows=%d missingInvestment=%d "
+                                + "TU-mismatch=%d TU=%.2f MU=%.2f maxItems/row=%d "
+                                + "maxAUUB(%s)=%.2f upper=%.2f lower=%.2f%n",
+                        audit.name(), audit.rows(), audit.items(), audit.investmentRows(),
+                        audit.missingInvestmentItems(), audit.mismatchedTransactionUtilities(),
+                        audit.totalTransactionUtility(), audit.totalMaximumUtility(),
+                        audit.maximumTransactionLength(), audit.strongestUpperBoundItem(),
+                        audit.strongestUpperBound(), su * audit.totalTransactionUtility(),
+                        sl * audit.totalTransactionUtility());
+            }
+            return;
+        }
+
         InputData input = loadInput(options);
-        ComparisonReport comparison = ComparisonReport.run(input);
-        AnalysisReport report = comparison.tight();
+        AnalysisReport report = AnalysisReport.run(input);
         printReport(input, report, options.summaryOnly);
 
         if (options.outputDirectory != null) {
             String source = options.inputPath == null ? "Tables 2–3 · bài báo"
                     : options.inputPath.getFileName().toString();
-            ExportBundle.writeDirectory(input, comparison, options.outputDirectory, source);
+            ExportBundle.writeDirectory(input, report, options.outputDirectory, source);
             System.out.println("Da xuat ket qua: " + options.outputDirectory.toAbsolutePath());
         }
     }
@@ -34,6 +55,25 @@ public final class Main {
             return overrideThresholds(InputParser.parseBuiltInSample(), options);
         }
 
+        if (options.inputPath.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".zip")) {
+            if (options.dataset == null) {
+                throw new IllegalArgumentException("ZIP có 6 bộ dữ liệu độc lập; hãy dùng --dataset NAME "
+                        + "hoặc --audit-archive ZIP để kiểm tra cả 6 bộ.");
+            }
+            double su = Double.isNaN(options.upperThreshold) ? 0.23 : options.upperThreshold;
+            double sl = Double.isNaN(options.lowerThreshold) ? 0.10 : options.lowerThreshold;
+            return ArchiveDatasetReader.read(options.inputPath, options.dataset, su, sl, System.out::println);
+        }
+        if (options.inputPath.getFileName().toString().equalsIgnoreCase("transactions.txt")) {
+            double su = Double.isNaN(options.upperThreshold) ? 0.23 : options.upperThreshold;
+            double sl = Double.isNaN(options.lowerThreshold) ? 0.10 : options.lowerThreshold;
+            try (var reader = java.nio.file.Files.newBufferedReader(options.inputPath)) {
+                Path parent = options.inputPath.toAbsolutePath().getParent();
+                return ArchiveDatasetReader.readTransactionsText(reader,
+                        parent == null ? "transactions" : parent.getFileName().toString(),
+                        su, sl, System.out::println);
+            }
+        }
         return overrideThresholds(InputParser.parse(options.inputPath), options);
     }
 
@@ -101,11 +141,6 @@ public final class Main {
             } else {
                 System.out.println("  Divided form unavailable (denominator <= 0); stable comparison used.");
             }
-            System.out.printf(Locale.US,
-                    "  Original Eq.(5), comparison only: TU(ID)=%.3f, limit=%.3f => %s%n",
-                    batch.accumulatedTransactionUtility(), batch.originalRescanLimit(),
-                    batch.accumulatedTransactionUtility() >= batch.originalRescanLimit()
-                            ? "WOULD RE-SCAN" : "WOULD UPDATE");
         } else {
             System.out.println("  Initial DB0 scan; re-scan condition is not applied.");
         }
@@ -147,6 +182,8 @@ public final class Main {
 
                 Options:
                   --input FILE          Read PIHAUPA text input
+                  --dataset NAME        Select one dataset from a Data ZIP
+                  --audit-archive ZIP   Validate all datasets in the ZIP without mining
                   --su VALUE            Override upper threshold ratio
                   --sl VALUE            Override lower threshold ratio
                   --output-dir DIR      Export input, DB0-DB2, JSON and CSV reports
@@ -160,6 +197,8 @@ public final class Main {
 
     private static final class CliOptions {
         private Path inputPath;
+        private Path auditArchive;
+        private String dataset;
         private Path outputDirectory;
         private boolean summaryOnly;
         private boolean help;
@@ -174,6 +213,8 @@ public final class Main {
                     case "--summary" -> options.summaryOnly = true;
                     case "--help", "-h" -> options.help = true;
                     case "--input" -> options.inputPath = Path.of(requireValue(args, ++i, arg));
+                    case "--audit-archive" -> options.auditArchive = Path.of(requireValue(args, ++i, arg));
+                    case "--dataset" -> options.dataset = requireValue(args, ++i, arg);
                     case "--output-dir" -> options.outputDirectory = Path.of(requireValue(args, ++i, arg));
                     case "--su" -> options.upperThreshold = Double.parseDouble(requireValue(args, ++i, arg));
                     case "--sl" -> options.lowerThreshold = Double.parseDouble(requireValue(args, ++i, arg));
