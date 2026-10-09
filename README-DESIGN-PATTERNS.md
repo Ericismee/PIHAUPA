@@ -36,6 +36,8 @@ Mỗi lượt phân tích có miner riêng để không chia sẻ trạng thái 
 
 ## 2. Observer: giao diện phản ứng với người dùng
 
+**Khái niệm.** Observer là mẫu hành vi trong đó một đối tượng phát sự kiện (*subject*) thông báo cho các đối tượng đã đăng ký theo dõi (*observers*) khi có thay đổi hoặc hành động. Bên phát không cần gọi trực tiếp từng chức năng nghiệp vụ. Trong Swing, nút là nguồn sự kiện và `ActionListener` là đối tượng nhận sự kiện; chương trình dùng cơ chế sẵn có này, không tự xây một lớp `Subject`.
+
 **Vấn đề.** Cửa sổ có nhiều hành động—chọn dữ liệu, nạp ví dụ, chạy, xuất báo cáo. Nếu logic của tất cả nút bị trộn vào một luồng xử lý, việc bảo trì và kiểm tra từng hành động sẽ khó hơn.
 
 **Cách áp dụng.** Trong [DesktopApp.java](src/piHAUPA/DesktopApp.java), mỗi `JButton` đăng ký một `ActionListener` đúng với nhiệm vụ của nó: `runButton` gọi `runAnalysis()`, `exportButton` gọi `exportLastRun()`, các nút chọn tệp/thư mục gọi hộp chọn tương ứng. [ModernPathDialog.java](src/piHAUPA/ModernPathDialog.java) dùng listener cho điều hướng, chấp nhận và hủy lựa chọn.
@@ -45,6 +47,8 @@ Mỗi lượt phân tích có miner riêng để không chia sẻ trạng thái 
 **Giới hạn.** Đây là Observer theo mô hình sự kiện **có sẵn của Swing**, không phải hệ thống publish/subscribe tự viết. Web dùng sự kiện DOM trong [app.js](web/app.js), không dùng đối tượng `ActionListener` của Swing.
 
 ## 3. Template Method: công việc nền có vòng đời rõ ràng
+
+**Khái niệm.** Template Method là mẫu hành vi: lớp nền xác định khung và thứ tự của một quy trình, còn lớp con điền nội dung cho các bước được phép mở rộng mà không đổi khung đó. `SwingWorker` cung cấp vòng đời công việc nền; ứng dụng tạo lớp con ẩn danh và cài đặt `doInBackground()`, `process()` hoặc `done()` theo nhu cầu. Đây là cách **sử dụng** Template Method của thư viện, không phải một framework do dự án tự viết.
 
 **Vấn đề.** Đọc tệp lớn, chạy PIHAUPA hoặc ghi báo cáo trên EDT sẽ khiến cửa sổ ngừng phản hồi cho đến khi hoàn tất.
 
@@ -63,6 +67,8 @@ Swing quyết định thứ tự vòng đời; ứng dụng cung cấp nội dun
 
 ## 4. Facade: một cửa vào cho một quy trình nhiều bước
 
+**Khái niệm.** Facade là mẫu cấu trúc cung cấp một điểm vào đơn giản cho một nhóm thành phần và thao tác phức tạp. Người gọi yêu cầu một công việc ở mức cao; Facade điều phối các bước phía sau. Nó **không thay thế** các thành phần bên trong và cũng không có nghĩa mọi chức năng đều phải đi qua đúng một lớp.
+
 **Vấn đề.** Desktop, Web và CLI đều cần cùng trình tự: tạo miner, xử lý batch, đo đạc và đóng gói kết quả. Nếu mỗi giao diện tự thực hiện, quy trình dễ lệch nhau.
 
 | Cửa vào | Trình tự được che bên trong | Người gọi nhận được |
@@ -76,11 +82,15 @@ Swing quyết định thứ tự vòng đời; ứng dụng cung cấp nội dun
 
 ## 5. Static factory: tạo thành phần giao diện nhất quán
 
+**Khái niệm.** Static factory là phương thức tĩnh có tên, trả về một đối tượng đã được tạo hoặc cấu hình; bên gọi không cần trực tiếp dùng constructor của lớp triển khai. Đây là cách tổ chức API tạo đối tượng, **không đồng nghĩa** với GoF Factory Method (mẫu dùng quan hệ kế thừa để lớp con quyết định loại đối tượng được tạo).
+
 Trong [DesktopApp.java](src/piHAUPA/DesktopApp.java) và [ModernPathDialog.java](src/piHAUPA/ModernPathDialog.java), `BorderFactory.create...` tạo các đường viền Swing; `createCompoundBorder` kết hợp viền ngoài và khoảng đệm trong. Việc này giúp mã dựng giao diện ngắn và nhất quán hơn so với cấu hình border lặp lại ở nhiều vị trí.
 
 **Phân loại:** dự án **sử dụng static factory của Swing**, không tự triển khai GoF Factory Method. Việc ghép border cũng không đủ để khẳng định dự án tự triển khai Decorator. Cơ chế này thuộc trình bày cửa sổ, không tác động đến thời gian mining.
 
 ## 6. Skeleton Screen: cho thấy cấu trúc trước khi có số liệu
+
+**Khái niệm.** Skeleton Screen là mẫu thiết kế giao diện hiển thị các khung giữ chỗ có hình dạng gần với nội dung thật khi kết quả chưa sẵn sàng. Nó giúp người dùng nhận biết bố cục và trạng thái tải, nhưng các khung đó **không phải số liệu** và không được trình bày như kết quả đã tính.
 
 **Vấn đề.** Báo cáo có nhiều tab; một vùng trắng hoặc dòng “đang tải” không cho người dùng hình dung nơi sẽ xuất hiện kết luận, bảng mẫu và các phép đo.
 
