@@ -1,16 +1,13 @@
-$ErrorActionPreference = "Stop"
-
-if (!(Test-Path "out")) {
-    New-Item -ItemType Directory -Path "out" | Out-Null
-}
-
-javac -encoding UTF-8 -d out src\piHAUPA\*.java test\piHAUPA\*.java
-if ($LASTEXITCODE -ne 0) { throw "Java compilation failed with exit code $LASTEXITCODE" }
-java -ea -cp out piHAUPA.PiHaupaSelfTest
-if ($LASTEXITCODE -ne 0) { throw "PIHAUPA tests failed with exit code $LASTEXITCODE" }
-java -ea -cp out piHAUPA.ExportBundleTest
-if ($LASTEXITCODE -ne 0) { throw "Export tests failed with exit code $LASTEXITCODE" }
-java -ea -cp out piHAUPA.ArchiveDatasetReaderTest
-if ($LASTEXITCODE -ne 0) { throw "Archive import tests failed with exit code $LASTEXITCODE" }
-java -ea -cp out piHAUPA.LargeTextDatasetTest
-if ($LASTEXITCODE -ne 0) { throw "Large TXT tests failed with exit code $LASTEXITCODE" }
+$ErrorActionPreference = 'Stop'
+Push-Location $PSScriptRoot
+try {
+    & ./scripts/build.ps1
+    New-Item -ItemType Directory -Force target/test-classes | Out-Null
+    $tests = @(Get-ChildItem src/test/java -Recurse -Filter '*.java' | ForEach-Object FullName)
+    & javac -encoding UTF-8 --release 17 -cp target/classes -d target/test-classes @tests
+    if ($LASTEXITCODE -ne 0) { throw 'Test compilation failed.' }
+    foreach ($testClass in @('PiHaupaSelfTest','ExportBundleTest','ArchiveDatasetReaderTest','LargeTextDatasetTest','LabApplicationTest')) {
+        & java -ea -cp 'target/classes;target/test-classes' "piHAUPA.$testClass"
+        if ($LASTEXITCODE -ne 0) { throw "$testClass failed." }
+    }
+} finally { Pop-Location }

@@ -1,27 +1,15 @@
-$ErrorActionPreference = "Stop"
-
-if (!(Test-Path "out")) {
-    New-Item -ItemType Directory -Path "out" | Out-Null
-}
-
-javac -encoding UTF-8 -d out src\piHAUPA\*.java
-if ($LASTEXITCODE -ne 0) { throw "Java compilation failed with exit code $LASTEXITCODE" }
-
-$port = if ($args.Count -gt 0) { $args[0] } else { $null }
-if ($null -eq $port) {
-    foreach ($candidate in 8000..8010) {
-        $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $candidate)
-        try {
-            $listener.Start()
-            $port = [string]$candidate
-            break
-        } catch [System.Net.Sockets.SocketException] {
-            # Một server cũ đang dùng cổng này; thử cổng tiếp theo.
-        } finally {
-            $listener.Stop()
-        }
+param([int]$Port = 8000, [string]$DataRoot = '', [switch]$NoBrowser)
+$ErrorActionPreference = 'Stop'
+Push-Location $PSScriptRoot
+try {
+    & ./scripts/build.ps1
+    if ($DataRoot) { $env:PIHAUPA_DATA_ROOT = $DataRoot }
+    elseif (!$env:PIHAUPA_DATA_ROOT) {
+        $defaultData = Join-Path $env:USERPROFILE 'Downloads/Data-20261007T013338Z-1-001/Data'
+        if (Test-Path -LiteralPath $defaultData) { $env:PIHAUPA_DATA_ROOT = $defaultData }
     }
-    if ($null -eq $port) { throw "Không có cổng trống trong khoảng 8000–8010." }
-    Write-Host "PIHAUPA Web sẽ mở ở cổng $port."
-}
-java -cp out piHAUPA.WebServer $port
+    Write-Host "PIHAUPA Research Lab: http://localhost:$Port"
+    if (!$NoBrowser) { Start-Process "http://localhost:$Port" }
+    & java -Xmx4g -cp target/classes vn.edu.dlu.pihaupa.web.LabServer $Port
+    if ($LASTEXITCODE -ne 0) { throw 'Web server stopped with an error.' }
+} finally { Pop-Location }

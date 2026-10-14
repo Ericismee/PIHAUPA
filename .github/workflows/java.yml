@@ -1,0 +1,16 @@
+name: Java verification
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile and run algorithm, parser, export and application tests
+        shell: pwsh
+        run: ./run-tests.ps1

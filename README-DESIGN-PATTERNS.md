@@ -38,6 +38,8 @@ Mỗi lượt phân tích có miner riêng để không chia sẻ trạng thái 
 
 **Khái niệm.** Observer là mẫu hành vi trong đó một đối tượng phát sự kiện (*subject*) thông báo cho các đối tượng đã đăng ký theo dõi (*observers*) khi có thay đổi hoặc hành động. Bên phát không cần gọi trực tiếp từng chức năng nghiệp vụ. Trong Swing, nút là nguồn sự kiện và `ActionListener` là đối tượng nhận sự kiện; chương trình dùng cơ chế sẵn có này, không tự xây một lớp `Subject`.
 
+**Mục đích trong PIHAUPA.** Biến từng thao tác của người dùng thành đúng một hành động: chọn tệp để xác định dữ liệu đầu vào, nhấn **Chạy** để bắt đầu phân tích, nhấn **Xuất** để ghi báo cáo. Nhờ đó việc điều khiển giao diện được tách khỏi mã tính AU, phân loại mẫu và quyết định re-scan; khi thêm một nút mới có thể tìm và sửa handler tương ứng.
+
 **Vấn đề.** Cửa sổ có nhiều hành động—chọn dữ liệu, nạp ví dụ, chạy, xuất báo cáo. Nếu logic của tất cả nút bị trộn vào một luồng xử lý, việc bảo trì và kiểm tra từng hành động sẽ khó hơn.
 
 **Cách áp dụng.** Trong [DesktopApp.java](src/piHAUPA/DesktopApp.java), mỗi `JButton` đăng ký một `ActionListener` đúng với nhiệm vụ của nó: `runButton` gọi `runAnalysis()`, `exportButton` gọi `exportLastRun()`, các nút chọn tệp/thư mục gọi hộp chọn tương ứng. [ModernPathDialog.java](src/piHAUPA/ModernPathDialog.java) dùng listener cho điều hướng, chấp nhận và hủy lựa chọn.
@@ -49,6 +51,8 @@ Mỗi lượt phân tích có miner riêng để không chia sẻ trạng thái 
 ## 3. Template Method: công việc nền có vòng đời rõ ràng
 
 **Khái niệm.** Template Method là mẫu hành vi: lớp nền xác định khung và thứ tự của một quy trình, còn lớp con điền nội dung cho các bước được phép mở rộng mà không đổi khung đó. `SwingWorker` cung cấp vòng đời công việc nền; ứng dụng tạo lớp con ẩn danh và cài đặt `doInBackground()`, `process()` hoặc `done()` theo nhu cầu. Đây là cách **sử dụng** Template Method của thư viện, không phải một framework do dự án tự viết.
+
+**Mục đích trong PIHAUPA.** Cho phép Desktop đọc dữ liệu lớn, chạy khai phá và xuất TXT/CSV mà cửa sổ vẫn có thể phản hồi. Công việc nặng chạy ở nền; thông báo tiến độ và kết quả được đưa về giao diện đúng luồng. Pattern này giải quyết **trải nghiệm và an toàn luồng UI**, không rút ngắn thời gian tính PIHAUPA.
 
 **Vấn đề.** Đọc tệp lớn, chạy PIHAUPA hoặc ghi báo cáo trên EDT sẽ khiến cửa sổ ngừng phản hồi cho đến khi hoàn tất.
 
@@ -69,6 +73,8 @@ Swing quyết định thứ tự vòng đời; ứng dụng cung cấp nội dun
 
 **Khái niệm.** Facade là mẫu cấu trúc cung cấp một điểm vào đơn giản cho một nhóm thành phần và thao tác phức tạp. Người gọi yêu cầu một công việc ở mức cao; Facade điều phối các bước phía sau. Nó **không thay thế** các thành phần bên trong và cũng không có nghĩa mọi chức năng đều phải đi qua đúng một lớp.
 
+**Mục đích trong PIHAUPA.** Giữ Desktop, Web và CLI dùng cùng một quy trình phân tích thay vì mỗi nơi tự tạo miner và tự lặp qua batch. `AnalysisReport.run(...)` trả về báo cáo thống nhất; `ExportBundle` chuyển báo cáo đã tính thành tệp xuất. Điều này giảm nguy cơ cùng một dữ liệu nhưng các giao diện cho kết quả khác nhau vì điều phối khác nhau.
+
 **Vấn đề.** Desktop, Web và CLI đều cần cùng trình tự: tạo miner, xử lý batch, đo đạc và đóng gói kết quả. Nếu mỗi giao diện tự thực hiện, quy trình dễ lệch nhau.
 
 | Cửa vào | Trình tự được che bên trong | Người gọi nhận được |
@@ -84,6 +90,8 @@ Swing quyết định thứ tự vòng đời; ứng dụng cung cấp nội dun
 
 **Khái niệm.** Static factory là phương thức tĩnh có tên, trả về một đối tượng đã được tạo hoặc cấu hình; bên gọi không cần trực tiếp dùng constructor của lớp triển khai. Đây là cách tổ chức API tạo đối tượng, **không đồng nghĩa** với GoF Factory Method (mẫu dùng quan hệ kế thừa để lớp con quyết định loại đối tượng được tạo).
 
+**Mục đích trong PIHAUPA.** Dùng `BorderFactory` của Swing để tạo viền, đường phân cách và khoảng đệm cho các vùng của Desktop một cách ngắn gọn, nhất quán. Đây là hỗ trợ dựng giao diện dễ đọc và dễ chỉnh sửa; nó không tham gia xử lý dữ liệu hay tính toán mẫu.
+
 Trong [DesktopApp.java](src/piHAUPA/DesktopApp.java) và [ModernPathDialog.java](src/piHAUPA/ModernPathDialog.java), `BorderFactory.create...` tạo các đường viền Swing; `createCompoundBorder` kết hợp viền ngoài và khoảng đệm trong. Việc này giúp mã dựng giao diện ngắn và nhất quán hơn so với cấu hình border lặp lại ở nhiều vị trí.
 
 **Phân loại:** dự án **sử dụng static factory của Swing**, không tự triển khai GoF Factory Method. Việc ghép border cũng không đủ để khẳng định dự án tự triển khai Decorator. Cơ chế này thuộc trình bày cửa sổ, không tác động đến thời gian mining.
@@ -91,6 +99,8 @@ Trong [DesktopApp.java](src/piHAUPA/DesktopApp.java) và [ModernPathDialog.java]
 ## 6. Skeleton Screen: cho thấy cấu trúc trước khi có số liệu
 
 **Khái niệm.** Skeleton Screen là mẫu thiết kế giao diện hiển thị các khung giữ chỗ có hình dạng gần với nội dung thật khi kết quả chưa sẵn sàng. Nó giúp người dùng nhận biết bố cục và trạng thái tải, nhưng các khung đó **không phải số liệu** và không được trình bày như kết quả đã tính.
+
+**Mục đích trong PIHAUPA.** Cho người dùng Web thấy trước vị trí của phần tổng quan, các bước tính và bảng kết quả khi chưa chạy hoặc đang đợi dữ liệu lớn. Nhãn trạng thái giúp phân biệt **chưa chạy**, **đang phân tích** và **đã có kết quả/lỗi**; skeleton không được dùng thay cho số liệu thật trong báo cáo.
 
 **Vấn đề.** Báo cáo có nhiều tab; một vùng trắng hoặc dòng “đang tải” không cho người dùng hình dung nơi sẽ xuất hiện kết luận, bảng mẫu và các phép đo.
 
@@ -113,19 +123,25 @@ Skeleton giúp định hướng, không giảm thời gian đọc TXT, thời gi
 
 ## Phụ lục: phép đo và giới hạn kết luận
 
-Phép đo dưới đây được lưu từ một đợt kiểm tra trước, **không phải phép đo hiệu năng riêng của từng design pattern**. [PatternBenchmark.java](test/piHAUPA/PatternBenchmark.java) chạy ba lượt warm-up, bảy lượt đo, rồi lấy trung vị thời gian `ComparisonReport.run` và byte cấp phát của thread hiện tại. Parsing nằm ngoài vùng đo; `ComparisonReport` còn có warm-up/lặp nội bộ với dữ liệu không quá 1.000 giao dịch. Hai trung vị có thể đến từ hai lượt khác nhau.
+### Số liệu trước/sau hiện có — đọc đúng phạm vi
 
-| Dữ liệu | Giao dịch | Trước (ms) | Sau (ms) | Byte cấp phát trước / sau | HAUP Original/Tight |
-|---|---:|---:|---:|---:|---|
-| [paper-scaled-9000.txt](examples/paper-scaled-9000.txt) | 9.000 | 48.695 | 74.878 | 51.500.240 / 51.500.240 | Trùng khớp |
-| [synthetic-1000.txt](examples/synthetic-1000.txt) | 1.000 | 107.486 | 109.762 | 105.182.264 / 105.182.264 | Trùng khớp |
+[design-pattern-measurements.csv](design-pattern-measurements.csv) lưu hai mốc tên `before` và `after` cho cùng bộ dữ liệu. Có thể tính chênh lệch giữa hai mốc, **nhưng không thể gọi đó là “trước khi có pattern” và “sau khi có pattern”**: mã ở commit cũ `35c808e` đã dùng listener, `SwingWorker`, `AnalysisReport.run(...)` và skeleton Web. CSV cũng không lưu commit, cấu hình máy/JVM và thay đổi cụ thể giữa hai mốc. Vì vậy bảng sau là số liệu *trước/sau được ghi nhận*, không phải thực nghiệm cô lập tác động của design pattern.
+
+[PatternBenchmark.java](test/piHAUPA/PatternBenchmark.java) chạy ba lượt warm-up, bảy lượt đo, rồi lấy trung vị thời gian `ComparisonReport.run` và byte cấp phát của thread hiện tại. Parsing nằm ngoài vùng đo; `ComparisonReport` còn có warm-up/lặp nội bộ với dữ liệu không quá 1.000 giao dịch. Hai trung vị có thể đến từ hai lượt khác nhau.
+
+| Dữ liệu | Giao dịch | Trước (ms) | Sau (ms) | Chênh lệch thời gian | Byte cấp phát trước / sau | HAUP Original/Tight |
+|---|---:|---:|---:|---:|---:|---|
+| [paper-scaled-9000.txt](examples/paper-scaled-9000.txt) | 9.000 | 48.695 | 74.878 | +26.183 ms (+53,77%) | 51.500.240 / 51.500.240 (0%) | Trùng khớp |
+| [synthetic-1000.txt](examples/synthetic-1000.txt) | 1.000 | 107.486 | 109.762 | +2.276 ms (+2,12%) | 105.182.264 / 105.182.264 (0%) | Trùng khớp |
 
 | Dữ liệu | Re-scan Original / Tight | Node kết hợp Original / Tight |
 |---|---:|---:|
 | paper-scaled-9000 | 2 / 1 | 37 / 23 |
 | synthetic-1000 | 4 / 4 | 3.488 / 3.488 |
 
-Trên bộ 9.000 giao dịch, Tight có một re-scan thay vì hai và 23 node kết hợp thay vì 37. Đó là **so sánh hai điều kiện thuật toán trên bộ dữ liệu này**, không chứng minh các design pattern làm chương trình nhanh hơn. Thời gian “sau” trong phép đo trên còn cao hơn “trước”; không nên tuyên bố tăng tốc từ bảng này. Byte cấp phát không phải peak heap hoặc RSS, và harness không đo render, tương tác nút, duyệt thư mục hay I/O xuất tệp.
+Trên bộ 9.000 giao dịch, Tight có một re-scan thay vì hai và 23 node kết hợp thay vì 37. Đó là **so sánh hai điều kiện thuật toán trên bộ dữ liệu này**, không chứng minh các design pattern làm chương trình nhanh hơn. Ở cả hai bộ dữ liệu, trung vị thời gian mốc `after` **cao hơn** mốc `before`; byte cấp phát được ghi nhận bằng nhau. Không nên tuyên bố tăng tốc từ bảng này. Byte cấp phát không phải peak heap hoặc RSS, và harness không đo render, tương tác nút, duyệt thư mục hay I/O xuất tệp.
+
+Muốn có số liệu thực sự **trước/sau khi áp dụng từng pattern**, cần chọn hai phiên bản mã có cùng thuật toán và cùng dữ liệu, chỉ thay một cơ chế mỗi lần; ghi commit, JDK, máy, cấu hình heap, số lượt lặp và phép đo phù hợp. Chẳng hạn listener/`SwingWorker` cần đo độ trễ phản hồi của Desktop; skeleton cần thử nghiệm khả năng nhận biết trạng thái của Web; Facade và `BorderFactory` nên đánh giá khả năng bảo trì bằng thay đổi mã có kiểm soát. Chưa có phép đo đối chứng như vậy trong repo, nên tài liệu không gán một con số hiệu năng cho riêng pattern nào.
 
 Để lặp lại phép đo từ thư mục dự án, dùng JDK hỗ trợ `com.sun.management.ThreadMXBean`:
 

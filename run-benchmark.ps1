@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'scripts/java-environment.ps1')
 
 $rows = if ($args.Count -gt 0) { [int]$args[0] } else { 100000 }
 $items = if ($args.Count -gt 1) { [int]$args[1] } else { 30 }
@@ -14,5 +15,5 @@ if (!(Test-Path "out")) {
     New-Item -ItemType Directory -Path "out" | Out-Null
 }
 
-javac -encoding UTF-8 -d out src\piHAUPA\*.java
+javac -encoding UTF-8 -d out src\main\java\piHAUPA\*.java
 java -Xmx2g -cp out piHAUPA.Main --summary $file
