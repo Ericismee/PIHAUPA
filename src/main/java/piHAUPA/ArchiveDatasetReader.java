@@ -27,6 +27,12 @@ public final class ArchiveDatasetReader {
     private ArchiveDatasetReader() { }
 
     /** Read an extracted transactions.txt directly; no ZIP or investment file is required. */
+    /**
+     * DESIGN PATTERN — ADAPTER dữ liệu (chuyển biểu diễn đầu vào).
+     * Đổi items:TU:itemUtilities thành InputData mà miner hiểu, kiểm tra TU/utility.
+     * Utility đã tính sẵn nên dùng EU=1 để bảo toàn; không nhân investment metadata lần nữa.
+     * Parsing/validation vẫn có chi phí; Adapter giúp tích hợp, không tự làm mining nhanh hơn.
+     */
     public static InputData readTransactionsText(Reader source, String dataset, double su, double sl,
             Consumer<String> progress) throws IOException {
         if (!(sl > 0 && sl < su && su <= 1)) throw new IllegalArgumentException("Cần 0 < Sl < Su ≤ 1.");

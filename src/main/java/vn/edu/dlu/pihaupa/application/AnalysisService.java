@@ -13,6 +13,12 @@ public final class AnalysisService implements AutoCloseable {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final LinkedHashMap<String, Job> jobs = new LinkedHashMap<>();
     private boolean active;
+    /**
+     * DESIGN PATTERN — FACADE (điểm vào điều phối phân tích).
+     * Controller gọi submit; service phối hợp đọc, mining, đo, đối chiếu và cleanup.
+     * Nhận InputSource theo Strategy: không viết lại từng cách mở dữ liệu tại đây.
+     * Single worker là chính sách thực thi, không phải Singleton hay lợi ích mặc định của Facade.
+     */
     public synchronized Job submit(InputSource source, double su, double sl, boolean compare) {
         if (active) throw new IllegalStateException("Một phép đo đang chạy. Hãy đợi hoàn tất.");
         if (!(sl > 0 && sl < su && su <= 1)) throw new IllegalArgumentException("Cần 0 < Sl < Su ≤ 1.");

@@ -8,6 +8,12 @@ import java.util.*;
 import java.util.function.Consumer;
 
 /** Repository: catalog IDs resolve only to transactions.txt beneath the configured root. */
+/**
+ * DESIGN PATTERN — REPOSITORY (danh mục dữ liệu trên filesystem).
+ * Che việc tìm/mở transactions.txt sau các thao tác list/name/read theo ID.
+ * Chỉ đăng ký real path nằm dưới root; client không chọn đường dẫn tùy ý.
+ * Không phải ORM/database repository; danh mục được lập lại khi khởi động server.
+ */
 public final class DatasetCatalog {
     private final Map<String, Path> files = new LinkedHashMap<>();
     public DatasetCatalog(Path root) throws IOException {

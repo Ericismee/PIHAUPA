@@ -7,6 +7,13 @@ import java.nio.file.*;
 import java.util.function.Consumer;
 
 /** Strategy: built-in paper sample, catalog dataset, and uploaded text share one contract. */
+/**
+ * DESIGN PATTERN — STRATEGY (chiến lược nguồn dữ liệu).
+ * Cùng một contract read/name/cleanup, nhưng paper/catalog/upload đọc theo cách riêng.
+ * AnalysisService chỉ gọi contract này, không cần biết file đến từ đâu.
+ * Lợi ích: dễ thay/thêm nguồn và kiểm thử; không tự tăng tốc thuật toán khai phá.
+ * Các phương thức paper/catalog/upload là static factory, không phải GoF Factory Method.
+ */
 public interface InputSource {
     InputData read(double su, double sl, Consumer<String> progress) throws IOException;
     String name();

@@ -1,154 +1,296 @@
-# Design patterns trong PIHAUPA
+# Design pattern trong PIHAUPA Research Lab
 
-*Từ thao tác của người dùng đến một báo cáo có thể đối chiếu.*
+> **Cách đọc:** mỗi mẫu được trình bày theo cùng thứ tự: hiểu đơn giản → lý thuyết → dùng ở đâu → mục đích/tác dụng → thời gian và giới hạn.
+>
+> Nhấn liên kết **Code áp dụng** để đến đúng dòng source trên GitHub. Ngay trong code có chú thích tiếng Việt bắt đầu bằng `DESIGN PATTERN` hoặc `UI DESIGN PATTERN` để tìm nhanh.
 
-PIHAUPA có ba cách sử dụng—Desktop, Web cục bộ và CLI—nhưng chỉ có **một lõi khai phá Java**. Các design pattern và UI pattern trong tài liệu này giải quyết những vấn đề của ứng dụng: nhận tương tác, giữ giao diện phản hồi, điều phối nhiều bước tính toán và cho người dùng thấy trạng thái chờ. **Chúng không thay thế công thức hoặc điều kiện re-scan của bài báo.**
+[Hướng dẫn chạy và công thức](README.md)
 
-[README chính](README.md) · [Mã nguồn Java](src/piHAUPA) · [Giao diện Web](web) · [Dữ liệu phép đo](design-pattern-measurements.csv)
+## 1. Dự án sử dụng những mẫu nào?
 
-## 1. Bức tranh tổng thể
+Có **5 mẫu/vai trò thiết kế được mô tả**, thuộc các phạm vi khác nhau:
 
-```text
-Desktop / Web / CLI
-       │
-       ▼
-InputParser hoặc ArchiveDatasetReader
-       │  InputData: ngưỡng + các batch + external utility
-       ▼
-AnalysisReport.run(...)
-       │  tạo một PiHaupaMiner cho một lượt chạy
-       │  xử lý lần lượt DB0, DB1, DB2...
-       ▼
-AnalysisReport: mẫu, quyết định re-scan, thời gian, heap
-       ├──► Desktop / Web: trình bày kết quả
-       └──► ExportBundle / ReportWriter: TXT và CSV
-```
+1. **Strategy:** đổi cách lấy dữ liệu mà giữ nguyên cách gọi.
+2. **Facade:** một điểm vào điều phối quy trình nhiều bước.
+3. **Adapter:** nối HTTP/định dạng bên ngoài với model Java.
+4. **Repository:** truy cập dataset qua danh mục và ID.
+5. **Skeleton Screen:** khung giữ chỗ khi giao diện đang chờ dữ liệu.
 
-Mỗi lượt phân tích có miner riêng để không chia sẻ trạng thái thay đổi giữa các lượt. Ngược lại, **các batch trong cùng lượt phải đi qua cùng miner** để giữ trạng thái tăng dần. Đây là quyết định kiến trúc của chương trình, không phải một GoF pattern độc lập.
+**Ba mẫu trọng tâm ở phần xử lý là Strategy, Facade và Adapter.** Repository bổ sung ở tầng dữ liệu; Skeleton Screen bổ sung ở UI.
 
-| Cơ chế | Vấn đề được giải quyết | Nơi áp dụng | Phân loại chính xác |
-|---|---|---|---|
-| Observer / listener | Nối thao tác trên cửa sổ với hành động tương ứng | `DesktopApp`, `ModernPathDialog` | Cơ chế sự kiện do Swing cung cấp |
-| Template Method qua `SwingWorker` | Tính toán/xuất tệp lâu nhưng cửa sổ vẫn phản hồi | `DesktopApp` | Vòng đời công việc do Swing cung cấp |
-| Facade | Tránh lặp lại quy trình phân tích hoặc xuất ở từng giao diện | `AnalysisReport`, `ExportBundle` | Vai trò kiến trúc của mã dự án |
-| Static factory | Tạo border nhất quán khi dựng giao diện | `BorderFactory` trong Desktop | API Swing; không phải Factory Method tự triển khai |
-| Skeleton Screen | Tránh màn hình trắng trước và trong khi phân tích | Web | UI pattern; không thuộc GoF |
+Strategy và Facade thể hiện các mẫu GoF; Adapter trong dự án chủ yếu là vai trò kiến trúc tại ranh giới, không phải mọi lớp đều là GoF Object Adapter đầy đủ. Repository là pattern kiến trúc. Skeleton Screen là **UI/UX design pattern**, không thuộc 23 mẫu GoF nhưng vẫn là design pattern.
 
-## 2. Observer: giao diện phản ứng với người dùng
-
-**Khái niệm.** Observer là mẫu hành vi trong đó một đối tượng phát sự kiện (*subject*) thông báo cho các đối tượng đã đăng ký theo dõi (*observers*) khi có thay đổi hoặc hành động. Bên phát không cần gọi trực tiếp từng chức năng nghiệp vụ. Trong Swing, nút là nguồn sự kiện và `ActionListener` là đối tượng nhận sự kiện; chương trình dùng cơ chế sẵn có này, không tự xây một lớp `Subject`.
-
-**Mục đích trong PIHAUPA.** Biến từng thao tác của người dùng thành đúng một hành động: chọn tệp để xác định dữ liệu đầu vào, nhấn **Chạy** để bắt đầu phân tích, nhấn **Xuất** để ghi báo cáo. Nhờ đó việc điều khiển giao diện được tách khỏi mã tính AU, phân loại mẫu và quyết định re-scan; khi thêm một nút mới có thể tìm và sửa handler tương ứng.
-
-**Vấn đề.** Cửa sổ có nhiều hành động—chọn dữ liệu, nạp ví dụ, chạy, xuất báo cáo. Nếu logic của tất cả nút bị trộn vào một luồng xử lý, việc bảo trì và kiểm tra từng hành động sẽ khó hơn.
-
-**Cách áp dụng.** Trong [DesktopApp.java](src/piHAUPA/DesktopApp.java), mỗi `JButton` đăng ký một `ActionListener` đúng với nhiệm vụ của nó: `runButton` gọi `runAnalysis()`, `exportButton` gọi `exportLastRun()`, các nút chọn tệp/thư mục gọi hộp chọn tương ứng. [ModernPathDialog.java](src/piHAUPA/ModernPathDialog.java) dùng listener cho điều hướng, chấp nhận và hủy lựa chọn.
-
-**Giá trị.** Người đọc mã có thể đi từ nút → listener → handler, biết rõ tương tác nào khởi động chức năng nào. Listener chỉ nhận sự kiện trên **Event Dispatch Thread (EDT)**; nó không tự khai phá dữ liệu. Công việc nặng được chuyển tiếp sang `SwingWorker`.
-
-**Giới hạn.** Đây là Observer theo mô hình sự kiện **có sẵn của Swing**, không phải hệ thống publish/subscribe tự viết. Web dùng sự kiện DOM trong [app.js](web/app.js), không dùng đối tượng `ActionListener` của Swing.
-
-## 3. Template Method: công việc nền có vòng đời rõ ràng
-
-**Khái niệm.** Template Method là mẫu hành vi: lớp nền xác định khung và thứ tự của một quy trình, còn lớp con điền nội dung cho các bước được phép mở rộng mà không đổi khung đó. `SwingWorker` cung cấp vòng đời công việc nền; ứng dụng tạo lớp con ẩn danh và cài đặt `doInBackground()`, `process()` hoặc `done()` theo nhu cầu. Đây là cách **sử dụng** Template Method của thư viện, không phải một framework do dự án tự viết.
-
-**Mục đích trong PIHAUPA.** Cho phép Desktop đọc dữ liệu lớn, chạy khai phá và xuất TXT/CSV mà cửa sổ vẫn có thể phản hồi. Công việc nặng chạy ở nền; thông báo tiến độ và kết quả được đưa về giao diện đúng luồng. Pattern này giải quyết **trải nghiệm và an toàn luồng UI**, không rút ngắn thời gian tính PIHAUPA.
-
-**Vấn đề.** Đọc tệp lớn, chạy PIHAUPA hoặc ghi báo cáo trên EDT sẽ khiến cửa sổ ngừng phản hồi cho đến khi hoàn tất.
-
-**Cách áp dụng.** `runAnalysis()` và `exportLastRun()` trong [DesktopApp.java](src/piHAUPA/DesktopApp.java) tạo `SwingWorker`:
+## 2. Nhìn nhanh luồng hoạt động
 
 ```text
-execute()
-   ├─ doInBackground()  → đọc / khai phá / xuất ở luồng nền
-   ├─ publish/process   → cập nhật thông báo tiến độ
-   └─ done()            → nhận kết quả và cập nhật cửa sổ trên EDT
+Web / CLI
+   |
+   +-- HTTP hoặc file -> Adapter chuyển sang model Java
+   |
+   +-- Strategy chọn nguồn: mẫu bài báo / catalog / upload
+   |                       |
+   |                       +-- Repository tìm dataset theo ID
+   v
+Facade điều phối đọc -> khai phá -> đo -> đối chiếu -> báo cáo
+   |
+   v
+PiHaupaMiner xử lý DB0 -> DB1 -> DB2
+   |
+   +-- Report -> JSON / biểu đồ / TXT / CSV / ZIP
+
+Trong lúc chờ: UI hiển thị Skeleton Screen khi chưa có nội dung.
 ```
 
-Swing quyết định thứ tự vòng đời; ứng dụng cung cấp nội dung cho các phương thức mở rộng. Trước khi khởi động worker, chương trình chụp giá trị đầu vào và đường dẫn đầu ra trên EDT. Worker dùng bản chụp đó, tránh đọc trực tiếp ô nhập Swing từ luồng nền hoặc bị thay đổi dữ liệu giữa chừng. Khi chỉ **xuất lại**, worker dùng `AnalysisReport` đã có thay vì mining thêm một lần.
+**Ranh giới quan trọng:** pattern tổ chức chương trình; AU, MAU, pre-large và Tight re-scan mới là nội dung thuật toán từ bài báo. Không khẳng định bài báo gốc sử dụng các GoF pattern này.
 
-**Giá trị và giới hạn.** Cửa sổ phản hồi tốt hơn và việc cập nhật UI đúng luồng. `SwingWorker` không làm công thức PIHAUPA tính nhanh hơn; đây là Template Method của **thư viện Swing**, không phải lớp Template Method do dự án tự định nghĩa.
+## 3. Strategy — chọn cách lấy dữ liệu
 
-## 4. Facade: một cửa vào cho một quy trình nhiều bước
+### Hiểu đơn giản
 
-**Khái niệm.** Facade là mẫu cấu trúc cung cấp một điểm vào đơn giản cho một nhóm thành phần và thao tác phức tạp. Người gọi yêu cầu một công việc ở mức cao; Facade điều phối các bước phía sau. Nó **không thay thế** các thành phần bên trong và cũng không có nghĩa mọi chức năng đều phải đi qua đúng một lớp.
+“Cùng yêu cầu đọc dữ liệu, nhưng có thể đổi người thực hiện mà bên gọi không phải đổi quy trình.”
 
-**Mục đích trong PIHAUPA.** Giữ Desktop, Web và CLI dùng cùng một quy trình phân tích thay vì mỗi nơi tự tạo miner và tự lặp qua batch. `AnalysisReport.run(...)` trả về báo cáo thống nhất; `ExportBundle` chuyển báo cáo đã tính thành tệp xuất. Điều này giảm nguy cơ cùng một dữ liệu nhưng các giao diện cho kết quả khác nhau vì điều phối khác nhau.
+### Lý thuyết cơ bản
 
-**Vấn đề.** Desktop, Web và CLI đều cần cùng trình tự: tạo miner, xử lý batch, đo đạc và đóng gói kết quả. Nếu mỗi giao diện tự thực hiện, quy trình dễ lệch nhau.
+Strategy là mẫu hành vi, đóng gói các cách thực hiện một nhiệm vụ sau cùng một interface. Client chọn implementation; Context chỉ gọi interface.
 
-| Cửa vào | Trình tự được che bên trong | Người gọi nhận được |
-|---|---|---|
-| [`AnalysisReport.run(input, policy, progress)`](src/piHAUPA/AnalysisReport.java) | Tạo `PiHaupaMiner` → xử lý batch theo thứ tự → ghi tiến độ → lấy số đo và mẫu | Một `AnalysisReport` nhất quán cho Desktop, Web, CLI |
-| [`ExportBundle.writeDirectory(...)`](src/piHAUPA/ExportBundle.java) | Dùng báo cáo đã tính → tạo TXT, CSV, input chuẩn hóa và các bảng chi tiết | Bộ tệp xuất trong một thư mục |
+### Code áp dụng
 
-**Giá trị.** Mỗi giao diện gọi một điểm vào ngắn gọn và không cần biết chi tiết phối hợp của miner hoặc từng writer. Desktop/CLI dùng `writeDirectory` cho cả bộ tệp; Web gọi `reportText`/`reportCsv` trên báo cáo đã lưu tạm để tải từng định dạng. Xuất Web hiện tại **không chạy lại thuật toán**.
+- [InputSource — contract Strategy](src/main/java/vn/edu/dlu/pihaupa/application/InputSource.java#L17)
+- [AnalysisService.submit — Context và Facade](src/main/java/vn/edu/dlu/pihaupa/application/AnalysisService.java#L22)
 
-**Giới hạn.** Đây là *vai trò Facade* do các phương thức tĩnh đảm nhận, không phải một đối tượng Facade có trạng thái riêng. `PiHaupaMiner` vẫn chịu trách nhiệm về AU, MAU, PRE-LARGE và Tight Re-Scan Condition.
+Các vai trò trong dự án:
 
-## 5. Static factory: tạo thành phần giao diện nhất quán
+- **Strategy:** interface `InputSource`, có `read()`, `name()`, `cleanup()`.
+- **Implementation:** anonymous class do `paper()`, `catalog()` và `upload()` tạo.
+- **Context:** `AnalysisService` gọi `source.read(...)` và cleanup trong `finally`.
+- **Client:** `LabServer` chọn nguồn từ request người dùng.
 
-**Khái niệm.** Static factory là phương thức tĩnh có tên, trả về một đối tượng đã được tạo hoặc cấu hình; bên gọi không cần trực tiếp dùng constructor của lớp triển khai. Đây là cách tổ chức API tạo đối tượng, **không đồng nghĩa** với GoF Factory Method (mẫu dùng quan hệ kế thừa để lớp con quyết định loại đối tượng được tạo).
+```java
+// Bên gọi chọn nguồn; service dùng chung quy trình phân tích.
+InputSource source = InputSource.paper();
+service.submit(source, 0.23, 0.10, false);
+```
 
-**Mục đích trong PIHAUPA.** Dùng `BorderFactory` của Swing để tạo viền, đường phân cách và khoảng đệm cho các vùng của Desktop một cách ngắn gọn, nhất quán. Đây là hỗ trợ dựng giao diện dễ đọc và dễ chỉnh sửa; nó không tham gia xử lý dữ liệu hay tính toán mẫu.
+### Mục đích và tác dụng trong đề tài
 
-Trong [DesktopApp.java](src/piHAUPA/DesktopApp.java) và [ModernPathDialog.java](src/piHAUPA/ModernPathDialog.java), `BorderFactory.create...` tạo các đường viền Swing; `createCompoundBorder` kết hợp viền ngoài và khoảng đệm trong. Việc này giúp mã dựng giao diện ngắn và nhất quán hơn so với cấu hình border lặp lại ở nhiều vị trí.
+Ứng dụng cần chạy mẫu bài báo để kiểm chứng và dataset lớn để thực nghiệm. Strategy giúp thay nguồn mà không sửa công thức hoặc viết lại miner.
 
-**Phân loại:** dự án **sử dụng static factory của Swing**, không tự triển khai GoF Factory Method. Việc ghép border cũng không đủ để khẳng định dự án tự triển khai Decorator. Cơ chế này thuộc trình bày cửa sổ, không tác động đến thời gian mining.
+- Thêm nguồn mới ở một implementation thay vì rải điều kiện vào service.
+- Kiểm tra lỗi đọc/cleanup của từng nguồn độc lập.
+- Tách cách lấy dữ liệu khỏi cách xử lý dữ liệu.
 
-## 6. Skeleton Screen: cho thấy cấu trúc trước khi có số liệu
+### Thời gian và phần được tối ưu
 
-**Khái niệm.** Skeleton Screen là mẫu thiết kế giao diện hiển thị các khung giữ chỗ có hình dạng gần với nội dung thật khi kết quả chưa sẵn sàng. Nó giúp người dùng nhận biết bố cục và trạng thái tải, nhưng các khung đó **không phải số liệu** và không được trình bày như kết quả đã tính.
+**Tối ưu chính:** khả năng mở rộng, coupling và phạm vi sửa mã.
 
-**Mục đích trong PIHAUPA.** Cho người dùng Web thấy trước vị trí của phần tổng quan, các bước tính và bảng kết quả khi chưa chạy hoặc đang đợi dữ liệu lớn. Nhãn trạng thái giúp phân biệt **chưa chạy**, **đang phân tích** và **đã có kết quả/lỗi**; skeleton không được dùng thay cho số liệu thật trong báo cáo.
+Gọi strategy không tự giảm thời gian đọc, số re-scan hoặc lượng mẫu. Chưa đo overhead interface riêng nên không gán số ms/tỷ lệ tăng tốc. Reader đọc theo dòng là kỹ thuật I/O, không phải lợi ích mặc định của Strategy; miner vẫn cần bộ nhớ cho giao dịch/cấu trúc khai phá.
 
-**Vấn đề.** Báo cáo có nhiều tab; một vùng trắng hoặc dòng “đang tải” không cho người dùng hình dung nơi sẽ xuất hiện kết luận, bảng mẫu và các phép đo.
+> **Ghi nhớ:** Strategy giúp đổi nguồn thuận tiện, không làm PIHAUPA tự chạy nhanh hơn. Các phương thức tạo nguồn là static factory, không phải GoF Factory Method qua kế thừa.
 
-**Cách áp dụng.** [index.html](web/index.html) đặt `#emptyState` cho các tab báo cáo thường và `#largePlaceholder` cho Dữ liệu lớn. [app.js](web/app.js) chọn khung phù hợp với tab và đổi `data-loading` khi bắt đầu chạy. [styles.css](web/styles.css) vẽ các khối giữ chỗ và chỉ bật hiệu ứng nhẹ trong lúc thực sự phân tích; `prefers-reduced-motion` tắt hiệu ứng khi người dùng yêu cầu.
+## 4. Facade — điều phối một quy trình nhiều bước
 
-**Ba trạng thái phải phân biệt:**
+### Hiểu đơn giản
 
-1. **Chưa chạy:** skeleton là bản xem trước bố cục, không phải tín hiệu hệ thống đang tính.
-2. **Đang chạy:** skeleton kèm nhãn tiến độ; chưa có số liệu thật để kết luận.
-3. **Hoàn tất hoặc lỗi:** kết quả thật thay khung; nếu lỗi, hiển thị lỗi và không dựng số liệu giả.
+“Bên ngoài gọi một chức năng; bên trong phối hợp nhiều thành phần.”
 
-Skeleton giúp định hướng, không giảm thời gian đọc TXT, thời gian PIHAUPA hoặc bộ nhớ. Đây là **UI pattern**, không phải GoF design pattern.
+### Lý thuyết cơ bản
 
-## 7. Ranh giới thuật ngữ khi thuyết trình
+Facade là mẫu cấu trúc cung cấp điểm vào đơn giản cho subsystem phức tạp. Client không phải tự biết thứ tự gọi reader, miner, bộ đo và writer. Facade không thay thế trách nhiệm nghiệp vụ của những thành phần này.
 
-- [`RescanPolicy`](src/piHAUPA/RescanPolicy.java) hiện là `enum` TIGHT/ORIGINAL; [PiHaupaMiner.java](src/piHAUPA/PiHaupaMiner.java) rẽ nhánh theo enum. Chưa có interface và các chính sách đa hình, nên **chưa phải GoF Strategy**. Giao diện thông thường chạy Tight; Original còn phục vụ kiểm thử/đối chiếu.
-- PIHAUP-List, pattern tree, PatternExpansion, AUUB/MAU pruning, PRE-LARGE và Eq. (12) là **thuật toán hoặc cấu trúc dữ liệu của bài báo**, không phải GoF pattern.
-- `record` như `InputData`/`AnalysisReport` là cách mang dữ liệu giữa các lớp. Trường `final` không làm `Map`/`List` bên trong bất biến sâu và không tự biến record thành một GoF pattern.
-- Số re-scan giảm là hệ quả của điều kiện Tight, **không phải** lợi ích tự động của Observer, SwingWorker hay Facade.
+### Code áp dụng
 
-## Phụ lục: phép đo và giới hạn kết luận
+- [AnalysisService.submit — Context và Facade](src/main/java/vn/edu/dlu/pihaupa/application/AnalysisService.java#L22)
+- [AnalysisReport.run — điều phối các batch](src/main/java/piHAUPA/AnalysisReport.java#L49)
+- [ReportArchive.analysis — xuất từ kết quả đã có](src/main/java/vn/edu/dlu/pihaupa/application/ReportArchive.java#L19)
 
-### Số liệu trước/sau hiện có — đọc đúng phạm vi
+```java
+AnalysisReport report = AnalysisReport.run(input, RescanPolicy.TIGHT);
+ExportBundle.writeDirectory(input, report, outputDirectory, sourceName);
+```
 
-[design-pattern-measurements.csv](design-pattern-measurements.csv) lưu hai mốc tên `before` và `after` cho cùng bộ dữ liệu. Có thể tính chênh lệch giữa hai mốc, **nhưng không thể gọi đó là “trước khi có pattern” và “sau khi có pattern”**: mã ở commit cũ `35c808e` đã dùng listener, `SwingWorker`, `AnalysisReport.run(...)` và skeleton Web. CSV cũng không lưu commit, cấu hình máy/JVM và thay đổi cụ thể giữa hai mốc. Vì vậy bảng sau là số liệu *trước/sau được ghi nhận*, không phải thực nghiệm cô lập tác động của design pattern.
+- `AnalysisService.submit()` quản lý job, đọc, mining, đo, đối chiếu tùy chọn và cleanup.
+- `AnalysisReport.run()` tạo miner và cho các batch đi qua theo thứ tự.
+- `ExportBundle`/`ReportArchive` phối hợp các writer thành bộ báo cáo.
 
-[PatternBenchmark.java](test/piHAUPA/PatternBenchmark.java) chạy ba lượt warm-up, bảy lượt đo, rồi lấy trung vị thời gian `ComparisonReport.run` và byte cấp phát của thread hiện tại. Parsing nằm ngoài vùng đo; `ComparisonReport` còn có warm-up/lặp nội bộ với dữ liệu không quá 1.000 giao dịch. Hai trung vị có thể đến từ hai lượt khác nhau.
+### Mục đích và tác dụng trong đề tài
 
-| Dữ liệu | Giao dịch | Trước (ms) | Sau (ms) | Chênh lệch thời gian | Byte cấp phát trước / sau | HAUP Original/Tight |
-|---|---:|---:|---:|---:|---:|---|
-| [paper-scaled-9000.txt](examples/paper-scaled-9000.txt) | 9.000 | 48.695 | 74.878 | +26.183 ms (+53,77%) | 51.500.240 / 51.500.240 (0%) | Trùng khớp |
-| [synthetic-1000.txt](examples/synthetic-1000.txt) | 1.000 | 107.486 | 109.762 | +2.276 ms (+2,12%) | 105.182.264 / 105.182.264 (0%) | Trùng khớp |
+Web và CLI phải dùng cùng cách khai phá/đo kết quả. Facade giúp tránh mỗi giao diện tự điều phối một phiên bản khác nhau.
 
-| Dữ liệu | Re-scan Original / Tight | Node kết hợp Original / Tight |
-|---|---:|---:|
-| paper-scaled-9000 | 2 / 1 | 37 / 23 |
-| synthetic-1000 | 4 / 4 | 3.488 / 3.488 |
+- Giảm mã lặp tại bên gọi.
+- Tập trung thứ tự xử lý để dễ kiểm tra.
+- Một miner cho cả lượt giữ đúng trạng thái tăng dần OD/ID; lượt độc lập dùng miner mới.
+- Xuất dùng report đã tính, không mining lại chỉ để tạo file.
 
-Trên bộ 9.000 giao dịch, Tight có một re-scan thay vì hai và 23 node kết hợp thay vì 37. Đó là **so sánh hai điều kiện thuật toán trên bộ dữ liệu này**, không chứng minh các design pattern làm chương trình nhanh hơn. Ở cả hai bộ dữ liệu, trung vị thời gian mốc `after` **cao hơn** mốc `before`; byte cấp phát được ghi nhận bằng nhau. Không nên tuyên bố tăng tốc từ bảng này. Byte cấp phát không phải peak heap hoặc RSS, và harness không đo render, tương tác nút, duyệt thư mục hay I/O xuất tệp.
+### Thời gian và phần được tối ưu
 
-Muốn có số liệu thực sự **trước/sau khi áp dụng từng pattern**, cần chọn hai phiên bản mã có cùng thuật toán và cùng dữ liệu, chỉ thay một cơ chế mỗi lần; ghi commit, JDK, máy, cấu hình heap, số lượt lặp và phép đo phù hợp. Chẳng hạn listener/`SwingWorker` cần đo độ trễ phản hồi của Desktop; skeleton cần thử nghiệm khả năng nhận biết trạng thái của Web; Facade và `BorderFactory` nên đánh giá khả năng bảo trì bằng thay đổi mã có kiểm soát. Chưa có phép đo đối chứng như vậy trong repo, nên tài liệu không gán một con số hiệu năng cho riêng pattern nào.
+**Tối ưu chính:** nhất quán quy trình và tránh công việc thừa khi tái sử dụng report.
 
-Để lặp lại phép đo từ thư mục dự án, dùng JDK hỗ trợ `com.sun.management.ThreadMXBean`:
+```text
+Phân tích: đọc + mining + tổng hợp + đối chiếu nếu bật
+Xuất lại: tạo nội dung + nén/ghi + truyền file
+          không cộng thêm một lượt mining
+```
+
+Tránh mining lại là lợi ích cụ thể của implementation hiện tại, không phải mọi Facade đều tăng tốc. Chưa có benchmark A/B riêng để công bố tỷ lệ tiết kiệm.
+
+Giữ report hỗ trợ xuất lại nhưng chiếm heap. Cache tối đa 8 job và nội dung ZIP vẫn sử dụng bộ nhớ. Single worker là chính sách chạy tuần tự, không phải GoF Singleton.
+
+> **Ghi nhớ:** Facade làm cách gọi đơn giản và nhất quán; công thức/tốc độ khai phá vẫn thuộc miner.
+
+## 5. Adapter — chuyển giao tiếp và biểu diễn dữ liệu
+
+### Hiểu đơn giản
+
+“Mỗi bên nói một định dạng; adapter chuyển để cùng dùng được một lõi xử lý.”
+
+### Lý thuyết cơ bản
+
+Adapter là mẫu cấu trúc chuyển giao diện/biểu diễn có sẵn sang dạng bên sử dụng cần. GoF Object Adapter thường có Target interface và một đối tượng được bọc. Dự án này chủ yếu áp dụng vai trò adapter tại ranh giới HTTP và dữ liệu, không gán mọi parser/writer là Object Adapter thuần túy.
+
+### Code áp dụng
+
+- [LabServer — HTTP Adapter](src/main/java/vn/edu/dlu/pihaupa/web/LabServer.java#L22)
+- [ArchiveDatasetReader.readTransactionsText — Input Adapter](src/main/java/piHAUPA/ArchiveDatasetReader.java#L36)
+- [ReportArchive.analysis — xuất từ kết quả đã có](src/main/java/vn/edu/dlu/pihaupa/application/ReportArchive.java#L19)
+
+```text
+HTTP query/body -> LabServer -> InputSource / AnalysisService
+items:TU:itemUtilities -> reader -> InputData -> miner
+AnalysisReport -> writer -> JSON / CSV / TXT / HTML / ZIP
+```
+
+### Mục đích và tác dụng trong đề tài
+
+Miner nhận model Java; nó không nên biết URL, DOM hoặc cú pháp file. Adapter giữ phần chuyển đổi bên ngoài lõi.
+
+- Dùng chung miner cho Web và CLI.
+- Tập trung validation TU, item/utility và dữ liệu sai ở reader.
+- Đổi giao thức/định dạng không buộc viết lại AU/MAU/re-scan.
+- Giữ utility đúng khi chuyển biểu diễn.
+
+Ví dụ `1 2 3:17:4 5 8`: reader kiểm tra `4+5+8=17`, rồi giữ utility đã tính qua biểu diễn `EU=1`. **Không nhân investment metadata lần nữa.**
+
+### Thời gian và phần được tối ưu
+
+**Tối ưu chính:** khả năng tích hợp, tính nhất quán và phạm vi thay đổi.
+
+Parsing, validation, serialization và nén ZIP đều có chi phí. Adapter không tự giảm độ phức tạp mining. Validation có thể thêm thời gian nhưng ngăn xử lý dữ liệu sai; chưa có phép đo riêng để công bố mức tăng tốc do pattern.
+
+> **Ghi nhớ:** Adapter giúp bên ngoài và lõi Java phối hợp đúng, không phải mẹo tăng tốc thuật toán.
+
+## 6. Repository — danh mục dataset theo ID
+
+### Hiểu đơn giản
+
+“Muốn đọc dataset thì hỏi danh mục bằng ID, không tự đi tìm đường dẫn ở mọi nơi.”
+
+### Lý thuyết cơ bản
+
+Repository là pattern kiến trúc đóng gói truy cập dữ liệu sau các thao tác mức cao. Bên sử dụng không cần biết cách dữ liệu được tìm/mở/lưu bên dưới.
+
+### Code áp dụng
+
+- [DatasetCatalog — Repository](src/main/java/vn/edu/dlu/pihaupa/application/DatasetCatalog.java#L17)
+
+`DatasetCatalog` cung cấp `list()`, `name(id)`, `read(id,...)`. Nó duyệt thư mục cấu hình, chỉ đăng ký real path nằm dưới root và trả ID catalog cho UI.
+
+### Mục đích, tác dụng và thời gian
+
+- Tập trung việc khám phá/mở `transactions.txt`.
+- Tránh cho client gửi đường dẫn filesystem tùy ý.
+- Phối hợp với Strategy catalog để cung cấp cùng `InputData`.
+
+**Tối ưu chính:** tổ chức truy cập dữ liệu; không có bằng chứng pattern làm mining nhanh hơn. Danh mục được lập lúc server khởi động; ID không phải định danh bền và cần khởi động lại để khám phá file mới. Đây là filesystem repository, không phải ORM/database transaction.
+
+## 7. Skeleton Screen — khung nội dung khi đang chờ
+
+### Hiểu đơn giản
+
+“Chưa có kết quả thì hiện khung giữ chỗ, có dữ liệu thật mới thay nội dung vào.”
+
+### Lý thuyết cơ bản
+
+Skeleton Screen là **UI/UX design pattern** dùng placeholder mô phỏng vùng nội dung sắp xuất hiện. Nó không thuộc GoF nhưng vẫn là design pattern ở phạm vi giao diện.
+
+### Code áp dụng
+
+- [app.js — skeleton cho lượt phân tích đầu](src/main/resources/static/app.js#L135)
+- [app.js — skeleton kiểm chứng](src/main/resources/static/app.js#L251)
+- [app.js — skeleton danh mục test](src/main/resources/static/app.js#L265)
+- [styles.css — khối placeholder](src/main/resources/static/styles.css#L5)
+
+Đoạn tạo bốn khối chờ khi phân tích lần đầu:
+
+```javascript
+$('content').innerHTML = '<div class="kpi-grid">'
+  + Array(4).fill('<div class="loading-block"></div>').join('')
+  + '</div>';
+```
+
+```text
+Bắt đầu request -> Skeleton -> Kết quả thật
+                           -> Hoặc thông báo lỗi nếu thất bại
+```
+
+### Mục đích và tác dụng trong đề tài
+
+Dữ liệu lớn có khoảng chờ đọc/khai phá. Skeleton cho phản hồi trực quan thay vì vùng nội dung trống.
+
+- Cho biết khu vực đang chờ tải.
+- Giữ chỗ một phần bố cục; không đảm bảo loại bỏ mọi layout shift.
+- Không gán sẵn số đo hay trạng thái ĐẠT.
+- Nếu đã có report, lượt mới giữ report cũ và nêu rõ đó là lượt trước; không che toàn bộ bằng skeleton.
+
+Khối `.loading-block` hiện tại là placeholder đơn giản, không mô phỏng chi tiết mọi bảng. Spinner trên nút chạy là thành phần bổ sung, không phải chính Skeleton Screen.
+
+### Thời gian và phần được tối ưu
+
+**Tối ưu chính:** trải nghiệm và cách nhận biết thời gian chờ.
+
+Skeleton không giảm thời gian Java, CPU/heap miner hoặc số re-scan. Placeholder/animation còn có chi phí DOM/CSS/render; chưa đo riêng và chưa có khảo sát người dùng để công bố tỷ lệ cải thiện trải nghiệm. Skeleton không phải thanh phần trăm tiến độ.
+
+> **Ghi nhớ:** giao diện phản hồi rõ hơn, thuật toán không vì vậy mà tính nhanh hơn.
+
+## 8. Phần nào thực sự giảm công việc khai phá?
+
+Đó là **pre-large, Tight re-scan và pruning** trong thuật toán, không phải bản thân các pattern trên.
+
+```text
+Tight Eq. (12):
+MU(ID) − Su × TU(ID) ≥ (Su − Sl) × TU(OD)
+
+Original Eq. (13):
+TU(ID) × (1 − Su) ≥ (Su − Sl) × TU(OD)
+```
+
+Khi không cần re-scan, chương trình vẫn đọc batch mới và cập nhật PT, nhưng tránh dựng lại toàn bộ cấu trúc khai phá ở lượt đó. AUUB/MAU giúp cắt nhánh không cần xét.
+
+Ví dụ bài báo: HAUP cuối `{E}=84`, `{B}=75`, `{B,E}=63.5`; Tight re-scan **1 lần**, Original **2 lần**, không tính initial scan DB0. Giảm số re-scan không đồng nghĩa thời gian nhanh gấp hai.
+
+Các tối ưu implementation bổ sung phải mô tả riêng, không gắn nhãn là MAU mới của bài báo hoặc GoF pattern.
+
+## 9. Đọc số đo và kiểm chứng
+
+- **Import (ms):** đọc và validation.
+- **Thuật toán (ms):** wall time phần phân tích; không gồm đọc file/UI.
+- **CPU luồng (ms):** CPU của luồng xử lý nếu JVM hỗ trợ, không phải % CPU toàn máy.
+- **Heap (MiB):** bộ nhớ JVM quan sát, không phải RSS/peak tuyệt đối.
+- **Re-scan, mẫu duyệt, nút kết hợp:** lượng công việc của miner.
+
+Chưa có benchmark A/B cô lập từng design pattern, nên không đưa tỷ lệ giảm thời gian/RAM thiếu căn cứ. Muốn đánh giá phải giữ nguyên dataset, ngưỡng, kết quả, thuật toán, máy/JDK/heap và chạy nhiều lượt có warm-up phù hợp. Thời gian assertion testcase không phải benchmark miner.
 
 ```powershell
-javac -encoding UTF-8 -d out src\piHAUPA\*.java test\piHAUPA\*.java
-java -cp out piHAUPA.PatternBenchmark examples\paper-scaled-9000.txt
-java -cp out piHAUPA.PatternBenchmark examples\synthetic-1000.txt
+.\run-tests.ps1
 ```
 
-Các phép kiểm thử trong dự án gồm `PiHaupaSelfTest` và `ExportBundleTest`; bảng benchmark lưu tại [design-pattern-measurements.csv](design-pattern-measurements.csv). Phần đo này không thay cho kiểm thử thao tác giao diện thủ công.
+`PiHaupaSelfTest` bảo vệ tính đúng; test reader bảo vệ chuyển đổi dữ liệu; `ExportBundleTest` và `LabApplicationTest` bảo vệ pipeline, precision và bộ xuất. 20 case trên Web chỉ xác nhận phạm vi đã kiểm tra, không chứng minh mọi đầu vào hoặc tái lập toàn bộ benchmark bài báo.
+
+## 10. Tìm nhanh trong source
+
+Tìm các chú thích tiếng Việt đã đánh dấu:
+
+```powershell
+rg -n "DESIGN PATTERN|UI DESIGN PATTERN" src/main
+```
+
+Các comment mô tả **pattern, trách nhiệm, lợi ích và giới hạn** ngay tại code áp dụng. Tham chiếu `#L...` khớp phiên bản hiện tại; khi thêm/xóa dòng source cần cập nhật lại số dòng trong tài liệu.

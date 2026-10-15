@@ -43,6 +43,9 @@ public record AnalysisReport(
         return run(input, policy, ignored -> { });
     }
 
+    // DESIGN PATTERN — FACADE: một điểm vào chung cho Web/CLI.
+    // Tạo một miner cho cả lượt; các batch dùng cùng miner để giữ đúng OD/ID và cây mẫu.
+    // Facade thống nhất điều phối; việc giảm re-scan thuộc thuật toán PIHAUPA.
     public static AnalysisReport run(InputData input, RescanPolicy policy, Consumer<String> progress) {
         PiHaupaMiner miner = new PiHaupaMiner(input.externalUtilities(), input.upperThreshold(),
                 input.lowerThreshold(), policy);

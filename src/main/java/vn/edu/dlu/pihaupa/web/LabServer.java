@@ -13,6 +13,12 @@ import java.util.*;
 import java.util.concurrent.Executors;
 
 /** HTTP adapter/controller: no mining logic lives in this layer. Localhost only. */
+/**
+ * DESIGN PATTERN — ADAPTER tại ranh giới HTTP (vai trò kiến trúc).
+ * Chuyển method/query/body thành lời gọi ứng dụng và chuyển kết quả thành HTTP/JSON/file.
+ * Công thức AU, MAU và re-scan nằm trong lõi Java, không tính lại trong controller.
+ * Lợi ích: tách giao thức khỏi khai phá; không phải GoF Object Adapter đầy đủ.
+ */
 public final class LabServer {
     private final AnalysisService service = new AnalysisService();
     private final DatasetCatalog catalog;

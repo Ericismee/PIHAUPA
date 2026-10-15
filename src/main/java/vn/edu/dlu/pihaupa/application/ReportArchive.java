@@ -10,6 +10,12 @@ import java.util.zip.*;
 /** Export adapter: uses completed results only; never re-runs mining or tests. */
 public final class ReportArchive {
     private ReportArchive() {}
+    /**
+     * DESIGN PATTERN — FACADE xuất báo cáo; đồng thời chuyển định dạng đầu ra.
+     * Phối hợp writer, HTML/SVG, measurement và ZIP từ job đã hoàn tất.
+     * Không mining lại khi xuất: tránh công việc tính toán thừa.
+     * Nội dung file/ZIP được tạo trong bộ nhớ, nên vẫn tiêu thụ heap theo kích thước kết quả.
+     */
     public static Map<String,String> analysis(AnalysisService.Job job) {
         AnalysisReport r=job.report;
         Map<String,String> files=new LinkedHashMap<>();
