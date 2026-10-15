@@ -130,8 +130,8 @@ for (const file of [
   if (!content.includes('Oracle độc lập')) throw Error('Missing verification level');
   vm.runInContext('renderMeasurements()', ctx);
   if (!el('content').innerHTML.includes('median')) throw Error('Missing repeated measurement');
-  if (ctx.result.measurement.resources && !el('content').innerHTML.includes('RAM & bộ nhớ JVM'))
-    throw Error('Missing RAM charts');
+  if (ctx.result.measurement.resources && !el('content').innerHTML.includes('RAM tiến trình Java'))
+    throw Error('Missing RAM KPI cards');
   console.log('PASS module render:', ctx.result.source);
 }
 vm.runInContext("state.busy=true;currentJob='test';setRunPhase('CANCELLING');", ctx);
@@ -160,3 +160,15 @@ if (Number($('su').value)!==.23 || Number($('sl').value)!==.1) throw Error('Pape
   ctx,
 );
 console.log('PASS selectable thresholds, exact custom values and paper reference');
+
+if (fs.existsSync('tmp/resource-result.json')) {
+  ctx.result = JSON.parse(fs.readFileSync('tmp/resource-result.json', 'utf8'));
+  vm.runInContext('state.current=result;state.history=[result];', ctx);
+  const ram = vm.runInContext('renderResourceMeasurements(result)', ctx);
+  const sizes = vm.runInContext('renderSizeMeasurements()', ctx);
+  if (ram.includes('chart-widget') || sizes.includes('chart-widget'))
+    throw Error('Resource/size statistics must be numeric only');
+  if (!ram.includes('Runtime (ms)') || !ram.includes('RAM Java (MiB)'))
+    throw Error('Missing numeric metrics');
+  console.log('PASS numeric RAM/runtime tables without charts');
+}

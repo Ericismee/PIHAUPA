@@ -902,44 +902,42 @@ function renderPatterns(target) {
 function renderResourceMeasurements(c) {
   const resources = c.measurement.resources;
   if (!resources)
-    return notice('Lượt cũ chưa có số đo RAM tiến trình và RAM toàn máy; chạy lại để lấy số đo.');
-  const samples = resources.samples || [];
-  const available = samples.filter((s) => s.processResidentMiB != null);
-  const metric = (value) => (value == null ? 'Không hỗ trợ' : num(value) + ' MiB');
+    return notice('Lượt cũ chưa có số đo RAM; chạy lại để cập nhật các thẻ số liệu phía trên.');
+  const value = (v) => (v == null ? 'Chưa đo' : num(v));
   return card(
-    'RAM & bộ nhớ JVM',
-    resources.scope,
-    `<p>Đỉnh heap: <strong>${metric(resources.heapUsedMiBPeak)}</strong> · Đỉnh RAM tiến trình: <strong>${metric(resources.processResidentMiBPeak)}</strong> · RAM toàn máy dùng nhiều nhất: <strong>${metric(resources.systemUsedMiBPeak)}</strong></p>` +
-      chart(
-        samples.map((s) => num(s.elapsedMs / 1000)),
+    'Chi tiết số đo',
+    'Runtime: ms · bộ nhớ: MiB. Các lượt dùng chung JVM.',
+    table(
+      ['Lượt đo', 'Runtime (ms)', 'Đỉnh heap quan sát (MiB)'],
+      (c.measurement.runMeasurements || []).map((r, i) =>
+        tr([i + 1, num(r.runtimeMs), num(r.heapPeakMiB)]),
+      ),
+      'Bảng · Runtime và heap từng lượt',
+    ) +
+      `<details class="manifest-panel"><summary>Số đo bộ nhớ theo thời điểm · ${(resources.samples || []).length} mẫu</summary>${table(
         [
-          { name: 'JVM heap', values: samples.map((s) => s.heapUsedMiB), color: colors.blue },
-          ...(available.length === samples.length
-            ? [
-                {
-                  name: 'RAM tiến trình Java',
-                  values: samples.map((s) => s.processResidentMiB),
-                  color: colors.green,
-                },
-              ]
-            : []),
+          'Thời điểm (s)',
+          'Heap dùng (MiB)',
+          'Heap đã cấp (MiB)',
+          'RAM Java (MiB)',
+          'RAM máy dùng (MiB)',
+          'Tổng RAM máy (MiB)',
         ],
-        { unit: 'MiB', xLabel: 'Thời gian từ lúc bắt đầu lấy mẫu (s)', yLabel: 'Bộ nhớ' },
-      ) +
-      chart(
-        samples.map((s) => num(s.elapsedMs / 1000)),
-        [
-          {
-            name: 'RAM toàn máy đang dùng',
-            values: samples.map((s) => s.systemUsedMiB),
-            color: colors.slate,
-          },
-        ],
-        { unit: 'MiB', xLabel: 'Thời gian (s)', yLabel: 'RAM toàn máy' },
-      ) +
-      '<p class="subtle">Lấy mẫu khoảng 1 giây; đỉnh quan sát có thể bỏ lỡ đỉnh ngắn. RAM toàn máy gồm mọi ứng dụng. JVM dùng chung giữa các lượt, không phải bộ nhớ tăng thêm riêng của thuật toán. Không bao gồm RAM JVM con khi đối chiếu.</p>',
+        (resources.samples || []).map((r) =>
+          tr([
+            num(r.elapsedMs / 1000),
+            value(r.heapUsedMiB),
+            value(r.heapCommittedMiB),
+            value(r.processResidentMiB),
+            value(r.systemUsedMiB),
+            value(r.systemTotalMiB),
+          ]),
+        ),
+        'Bảng · Bộ nhớ lấy mẫu',
+      )}</details><p class="subtle">Lấy mẫu khoảng 1 giây; đỉnh quan sát có thể bỏ lỡ đỉnh ngắn. RAM toàn máy gồm ứng dụng khác. RAM Java chỉ tính tiến trình server, không gồm JVM con Original/Tight.</p>`,
   );
 }
+
 function renderSizeMeasurements() {
   const current = state.current;
   const runs = state.history
@@ -954,55 +952,33 @@ function renderSizeMeasurements() {
   return card(
     'Thực nghiệm thay đổi kích thước dữ liệu',
     'Cùng tệp và Sᵤ/Sₗ; kiểm tra số lượt đo trước khi so sánh.',
-    chart(
-      runs.map((c) => num(c.report.transactionCount, 0)),
+    table(
       [
-        {
-          name: 'Runtime thuật toán · median',
-          values: runs.map((c) => c.report.elapsedMs),
-          color: colors.blue,
-        },
+        'Kích thước',
+        'Giao dịch',
+        'Sᵤ / Sₗ',
+        'Lượt đo',
+        'Runtime median (ms)',
+        'Đỉnh heap (MiB)',
+        'RAM tiến trình (MiB)',
+        'HAUP',
       ],
-      { unit: 'ms', xLabel: 'Số giao dịch', yLabel: 'Runtime' },
-    ) +
-      chart(
-        runs.map((c) => num(c.report.transactionCount, 0)),
-        [
-          {
-            name: 'Đỉnh heap thuật toán',
-            values: runs.map((c) => c.measurement.heapPeakObservedMb),
-            color: colors.green,
-          },
-        ],
-        { unit: 'MiB', xLabel: 'Số giao dịch', yLabel: 'Heap' },
-      ) +
-      table(
-        [
-          'Kích thước',
-          'Giao dịch',
-          'Sᵤ / Sₗ',
-          'Lượt đo',
-          'Runtime median (ms)',
-          'Đỉnh heap (MiB)',
-          'RAM tiến trình (MiB)',
-          'HAUP',
-        ],
-        runs.map((c) =>
-          tr([
-            num(c.manifest?.sizePercent || 100, 0) + '%',
-            num(c.report.transactionCount, 0),
-            num(c.report.upperThreshold, 10) + ' / ' + num(c.report.lowerThreshold, 10),
-            c.measurement.repetitions,
-            num(c.report.elapsedMs),
-            num(c.measurement.heapPeakObservedMb),
-            c.measurement.resources?.processResidentMiBPeak == null
-              ? 'Chưa đo'
-              : num(c.measurement.resources.processResidentMiBPeak),
-            last(c.report).largePatterns.length,
-          ]),
-        ),
-        'Bảng · Các trường hợp kích thước',
+      runs.map((c) =>
+        tr([
+          num(c.manifest?.sizePercent || 100, 0) + '%',
+          num(c.report.transactionCount, 0),
+          num(c.report.upperThreshold, 10) + ' / ' + num(c.report.lowerThreshold, 10),
+          c.measurement.repetitions,
+          num(c.report.elapsedMs),
+          num(c.measurement.heapPeakObservedMb),
+          c.measurement.resources?.processResidentMiBPeak == null
+            ? 'Chưa đo'
+            : num(c.measurement.resources.processResidentMiBPeak),
+          last(c.report).largePatterns.length,
+        ]),
       ),
+      'Bảng · Các trường hợp kích thước',
+    ),
     '<button class="button" id="export-sizes">Xuất so sánh kích thước CSV</button>',
   );
 }
@@ -1017,7 +993,7 @@ function renderMeasurements() {
     notice(
       '<strong>Phạm vi phép đo:</strong> elapsedMs đo thời gian xử lý trong AnalysisReport.run; đọc tệp được đo riêng. Heap là đỉnh quan sát trước/sau batch, không phải RSS hay đỉnh bộ nhớ tuyệt đối. CPU là thời gian CPU của luồng thực hiện, không phải % CPU toàn máy.',
     ) +
-    `<div class="kpi-grid">${kpi('Đọc + SHA-256', num(m.importMs), 'Không bao gồm thuật toán', 'datasets', 'ms')}${kpi('Thuật toán · median', num(r.elapsedMs), (m.repetitions || 1) + ' lượt · ' + num(m.minMs ?? r.elapsedMs) + '–' + num(m.maxMs ?? r.elapsedMs) + ' ms', 'clock', 'ms')}${kpi('CPU luồng khai phá', num(m.threadCpuMs), 'Tổng CPU các lượt + warm-up; không gồm đối chiếu', 'measurements', m.threadCpuMs == null ? '' : 'ms')}${kpi('JVM heap quan sát', num(m.heapPeakObservedMb), 'Lấy mẫu trước / sau mỗi batch', 'measurements', 'MiB')}</div>` +
+    `<div class="kpi-grid resource-kpis">${kpi('Đọc + SHA-256', num(m.importMs), 'Không bao gồm thuật toán', 'datasets', 'ms')}${kpi('Thuật toán · median', num(r.elapsedMs), (m.repetitions || 1) + ' lượt · ' + num(m.minMs ?? r.elapsedMs) + '–' + num(m.maxMs ?? r.elapsedMs) + ' ms', 'clock', 'ms')}${kpi('CPU luồng khai phá', num(m.threadCpuMs), 'Tổng CPU các lượt + warm-up; không gồm đối chiếu', 'measurements', m.threadCpuMs == null ? '' : 'ms')}${kpi('JVM heap quan sát', num(m.heapPeakObservedMb), 'Lấy mẫu trước / sau mỗi batch', 'measurements', 'MiB')}${kpi('RAM tiến trình Java', m.resources?.processResidentMiBPeak == null ? 'Chưa đo' : num(m.resources.processResidentMiBPeak), 'Đỉnh lấy mẫu · không gồm JVM con', 'measurements', m.resources?.processResidentMiBPeak == null ? '' : 'MiB')}${kpi('RAM toàn máy đang dùng', m.resources?.systemUsedMiBPeak == null ? 'Chưa đo' : num(m.resources.systemUsedMiBPeak), 'Đỉnh lấy mẫu · tổng RAM: ' + (m.resources?.samples?.[0]?.systemTotalMiB == null ? '—' : num(m.resources.samples[0].systemTotalMiB) + ' MiB'), 'measurements', m.resources?.systemUsedMiBPeak == null ? '' : 'MiB')}</div>` +
     `<div class="two-col equal-col">${card('Thời gian theo batch', 'Thời gian tường của processBatch', chart(labels, [{ name: 'Thuật toán', values: r.batches.map((b) => b.elapsedMs), color: colors.blue }], { unit: 'ms' }))}${card(
       'JVM heap theo batch',
       'MiB = bytes / 1.048.576 · không phải RSS',
@@ -1367,32 +1343,10 @@ async function renderTestCases() {
       '<strong>Phạm vi theo bài báo:</strong> TC-P01–12 đối chiếu ví dụ Tables 2–3, Table 5 và Eq. (5), (6), (12). TC-E/A/D là kiểm thử bổ sung của ứng dụng. 20/20 không có nghĩa tái lập toàn bộ benchmark của bài báo. TC-P dùng chung một lượt chạy mẫu; thời gian từng assertion không dùng để so tốc độ thuật toán.',
     ) +
     flow +
-    (ran && cases.every((c) => c.memoryBefore && c.memoryAfter)
-      ? card(
-          'Heap theo testcase',
-          'Hai thời điểm trước/sau case trong JVM chung; không phải peak hoặc lượng cấp phát riêng.',
-          chart(
-            cases.map((c) => c.id),
-            [
-              {
-                name: 'Trước case',
-                values: cases.map((c) => c.memoryBefore?.heapUsedMiB ?? 0),
-                color: colors.slate,
-              },
-              {
-                name: 'Sau case',
-                values: cases.map((c) => c.memoryAfter?.heapUsedMiB ?? 0),
-                color: colors.blue,
-              },
-            ],
-            { unit: 'MiB', xLabel: 'Testcase', yLabel: 'JVM heap' },
-          ),
-        )
-      : '') +
     card(
       'Thực nghiệm kích thước dữ liệu',
       'Chạy riêng 25%, 50%, 75%, 100% trên cùng tệp và cùng ngưỡng.',
-      '<p>Đây là các trường hợp khảo sát runtime và RAM; không gán ĐẠT nếu chưa có đối chứng đúng/sai. Chọn dữ liệu ở trang Phân tích, mở Tùy chọn & giải thích rồi bấm Thực nghiệm kích thước. Kết quả, biểu đồ và CSV so sánh nằm ở Đo lường & biểu đồ.</p><a class="button" href="#overview">Chọn dữ liệu và chạy thực nghiệm</a>',
+      '<p>Đây là các trường hợp khảo sát runtime và RAM; không gán ĐẠT nếu chưa có đối chứng đúng/sai. Chọn dữ liệu ở trang Phân tích, mở Tùy chọn & giải thích rồi bấm Thực nghiệm kích thước. Kết quả dạng số, bảng và CSV so sánh nằm ở Đo lường & biểu đồ.</p><a class="button" href="#overview">Chọn dữ liệu và chạy thực nghiệm</a>',
     ) +
     (ran && cases.every((c) => c.memoryBefore && c.memoryAfter)
       ? table(

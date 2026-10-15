@@ -72,13 +72,10 @@ public final class ReportArchive {
         html.append(plot("06 · Công việc miner (lượt / nút)",List.of("Mẫu duyệt","Nút kết hợp"),List.of((double)r.stats().patternsVisited(),(double)r.stats().combinedNodes())));
         html.append("<details><summary>Chi tiết từng bước và căn cứ</summary><pre>").append(h(files.get("BAO_CAO.txt"))).append("</pre></details>");
         if(job.measurements.get("resources") instanceof Map<?,?> resources && resources.get("samples") instanceof List<?> list){
-            var rows=list.stream().filter(Map.class::isInstance).map(x->(Map<?,?>)x).toList();
-            var seconds=rows.stream().map(x->String.valueOf(((Number)x.get("elapsedMs")).doubleValue()/1000)).toList();
-            for(String key:List.of("heapUsedMiB","processResidentMiB","systemUsedMiB")){
-                var valid=rows.stream().filter(x->x.get(key) instanceof Number).toList();
-                html.append(plot("RAM · "+key+" (MiB); trục X: giây",valid.stream().map(x->String.valueOf(((Number)x.get("elapsedMs")).doubleValue()/1000)).toList(),valid.stream().map(x->((Number)x.get(key)).doubleValue()).toList()));
-            }
-            html.append("<p>Lấy mẫu khoảng 1 giây, đỉnh quan sát không phải đỉnh tuyệt đối. RAM toàn máy gồm các ứng dụng khác. RAM tiến trình chỉ JVM server, không gồm JVM con. resources.json và resource-samples.csv chứa số liệu gốc.</p>");
+            html.append("<h2>Số đo RAM (MiB)</h2><p>Đỉnh heap: ").append(h(resources.get("heapUsedMiBPeak"))).append(" · Đỉnh RAM tiến trình: ").append(h(resources.get("processResidentMiBPeak"))).append(" · Đỉnh RAM toàn máy dùng: ").append(h(resources.get("systemUsedMiBPeak"))).append("</p>");
+            html.append("<table><tr><th>Thời điểm (ms)</th><th>Heap (MiB)</th><th>RAM Java (MiB)</th><th>RAM máy dùng (MiB)</th><th>Tổng RAM máy (MiB)</th></tr>");
+            for(Object entry:list)if(entry instanceof Map<?,?> row){html.append("<tr>");for(String key:List.of("elapsedMs","heapUsedMiB","processResidentMiB","systemUsedMiB","systemTotalMiB"))html.append("<td>").append(row.get(key)==null?"Chưa đo":h(row.get(key))).append("</td>");html.append("</tr>");}
+            html.append("</table><p>Lấy mẫu khoảng 1 giây; không gồm RAM JVM con; RAM toàn máy gồm mọi ứng dụng. Chi tiết trong resource-samples.csv.</p>");
         }
         html.append("<h2>Đo lường của lượt chạy</h2><pre>").append(h(job.measurementCsv)).append("</pre>");
         if(job.comparison!=null||job.isolatedComparisonCsv!=null)html.append("<h2>Đối chiếu Original / Tight</h2><pre>").append(h(files.get("comparison.csv"))).append("</pre>");
@@ -104,8 +101,6 @@ public final class ReportArchive {
             html.append(plot(c.get("id")+" · AU kỳ vọng (utility)",new ArrayList<>(expected.keySet()),new ArrayList<>(expected.values())));
             if(!actual.isEmpty())html.append(plot(c.get("id")+" · AU Java (utility)",new ArrayList<>(actual.keySet()),new ArrayList<>(actual.values())));
         }
-        var memoryCases=cases.stream().filter(c->c.get("memoryAfter") instanceof Map<?,?>).toList();
-        if(!memoryCases.isEmpty())html.append(plot("Heap sau testcase (MiB); JVM chung, không phải peak",memoryCases.stream().map(c->String.valueOf(c.get("id"))).toList(),memoryCases.stream().map(c->((Number)((Map<?,?>)c.get("memoryAfter")).get("heapUsedMiB")).doubleValue()).toList()));
         html.append("<table><tr><th>Case</th><th>Đầu vào</th><th>Kỳ vọng</th><th>Thực tế</th><th>Trạng thái</th><th>ms</th></tr>");
         for(var c:cases){html.append("<tr>");for(String key:List.of("id","input","expected","actual","state","elapsedMs"))html.append("<td>").append(h(c.getOrDefault(key,"Chưa chạy"))).append("</td>");html.append("</tr>");}
         return Map.of("testcases.csv",csv.toString(),"testcases.json",Json.encode(result),"TESTCASES.html",html.append("</table></body></html>").toString());
