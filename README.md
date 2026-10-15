@@ -470,3 +470,12 @@ ReadStageBenchmark đo đúng read + validation + SHA-256 + manifest trong JVM r
 Số đo nhanh có ảnh hưởng JIT/GC/OS cache, không phải benchmark JMH nhiều fork và không cam kết tốc độ trên mọi máy. Tests gồm numeric bit-for-bit với JDK (leading zero, dấu cộng, số thực/mũ/hex, số nguyên lớn), whitespace, raw hash CRLF/quantitative, tệp bị đổi khi đọc và UTF-8 lỗi. Test API 6 profile vẫn giữ HAUP và TU. Chưa thêm thư viện parser ngoài, mmap hoặc parse song song vì chưa có số đo cho thấy lợi ích trên pipeline này.
 
 Tái đo: `piHAUPA.ReadStageBenchmark <DataRoot> <TênThưMụcDataset>` với classpath `target/classes;target/test-classes` sau `run-tests.ps1`. Dùng cùng tham số và JVM riêng cho bản trước/sau.
+
+
+### Hiệu năng và thực nghiệm
+
+- Thời gian chạy: biểu đồ đường, đơn vị giây; bộ nhớ: biểu đồ cột, MB (1.000.000 bytes), tương ứng cách trình bày Fig. 8–14.
+- Tiến trình chèn: chọn **OR + 9 lần chèn** trong tùy chọn phân tích. DB0 chứa OR của dữ liệu; chín batch sau chia đều phần còn lại. OR 82%, 95,5%, 99,8% tương ứng các cấu hình dữ liệu trong bài báo; dữ liệu quá nhỏ được báo lỗi. Ví dụ Tables 2–3 mặc định vẫn giữ ba batch gốc.
+- Theo ngưỡng trên: giữ Sₗ và số giao dịch; theo kích thước: giữ hai ngưỡng; độ nhạy: cùng số giao dịch, thay hai ngưỡng. Chỉ các lượt có cùng nguồn, cấu hình chèn và số lần đo được ghép. Dãy kích thước dùng prefix 20/40/60/80/100%, không phải bộ dữ liệu tổng hợp 200K–1000K của tác giả.
+- Bảng thiết bị hiển thị thời gian đọc, CPU luồng, RAM Java, RAM máy và CPU lấy mẫu. Không gọi sampled heap là đỉnh RAM tuyệt đối; kết quả Java không đồng nhất phép đo C++ của tác giả. Các thuật toán đối chứng chưa cài đặt không xuất hiện dưới dạng số liệu giả.
+- ZIP thêm `insertion-performance.csv`: tiến trình chèn, số giao dịch tích lũy, thời gian mỗi batch, heap và quyết định re-scan; `resource-samples.csv` bổ sung CPU tiến trình/toàn máy.

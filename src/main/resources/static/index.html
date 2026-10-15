@@ -204,7 +204,11 @@
                 <label class="repeat-field" for="size-percent"
                   >Kích thước dữ liệu
                   <select id="size-percent">
-                    <option value="20">20% đầu tệp</option><option value="25">25% đầu tệp</option><option value="40">40% đầu tệp</option><option value="60">60% đầu tệp</option><option value="80">80% đầu tệp</option>
+                    <option value="20">20% đầu tệp</option>
+                    <option value="25">25% đầu tệp</option>
+                    <option value="40">40% đầu tệp</option>
+                    <option value="60">60% đầu tệp</option>
+                    <option value="80">80% đầu tệp</option>
                     <option value="50">50% đầu tệp</option>
                     <option value="75">75% đầu tệp</option>
                     <option value="100" selected>100% · toàn bộ</option>
@@ -219,11 +223,20 @@
                   phí đọc riêng phần mẫu. Đây là thực nghiệm hiệu năng, không phải testcase khẳng
                   định kết quả đúng.
                 </p>
-                <label class="repeat-field" for="insertion-steps">Chia batch
-                  <select id="insertion-steps"><option value="0">Mặc định của nguồn</option><option value="9">OR + 9 lần chèn · như Fig. 8–9</option></select>
+                <label class="repeat-field" for="insertion-steps"
+                  >Chia batch
+                  <select id="insertion-steps">
+                    <option value="0">Mặc định của nguồn</option>
+                    <option value="9">OR + 9 lần chèn · như Fig. 8–9</option>
+                  </select>
                 </label>
-                <label class="repeat-field" for="original-ratio">OR ban đầu
-                  <select id="original-ratio"><option value="0.82">82% · dữ liệu dày</option><option value="0.955">95,5% · kịch bản Bms-pos</option><option value="0.998">99,8% · kịch bản Chainstore</option></select>
+                <label class="repeat-field" for="original-ratio"
+                  >OR ban đầu
+                  <select id="original-ratio">
+                    <option value="0.82">82% · dữ liệu dày</option>
+                    <option value="0.955">95,5% · kịch bản Bms-pos</option>
+                    <option value="0.998">99,8% · kịch bản Chainstore</option>
+                  </select>
                 </label>
                 <div class="metric-details">
                   <span id="live-read">Đọc: —</span><span id="live-algorithm">Thuật toán: —</span

@@ -51,10 +51,7 @@ const pages = {
     'Giải thích điều kiện Tight bằng số liệu tích lũy từ lần full scan gần nhất.',
   ],
   patterns: ['Kết quả khai phá', 'Tra cứu các mẫu đang quản lý và tiện ích trung bình thực tế.'],
-  measurements: [
-    'Đo lường & biểu đồ',
-    'Tách chi phí đọc dữ liệu, thuật toán, CPU luồng và JVM heap.',
-  ],
+  measurements: ['Hiệu năng', 'Tách chi phí đọc dữ liệu, thuật toán, CPU luồng và JVM heap.'],
   datasets: [
     'Bộ dữ liệu thực nghiệm',
     'Đọc trực tiếp transactions.txt; mỗi bộ dữ liệu được phân tích độc lập.',
@@ -231,6 +228,8 @@ function setBusy(busy) {
   $('threshold-mode').disabled = busy;
   $('size-percent').disabled = busy;
   $('run-size-suite').disabled = busy || sizeSuiteRunning;
+  $('insertion-steps').disabled = busy;
+  $('original-ratio').disabled = busy;
   $('cancel-run').hidden = !busy;
   $('cancel-run').disabled = !currentJob;
   updatePending();
@@ -258,6 +257,9 @@ function updatePending() {
         Number($('su').value) !== config.su ||
         Number($('sl').value) !== config.sl ||
         Number($('size-percent').value || 100) !== (config.sizePercent || 100) ||
+        Number($('insertion-steps').value) !== (config.insertions || 0) ||
+        (Number($('insertion-steps').value) > 0 &&
+          Number($('original-ratio').value) !== config.originalRatio) ||
         (selected === 'upload' &&
           (($('file').files[0]?.lastModified ?? 0) !== config.fileModified ||
             $('format').value !== config.format))
@@ -422,6 +424,8 @@ async function observeJob(job, configuration = null) {
       fileModified: 0,
       repeats: result.measurement.repetitions || 1,
       sizePercent: result.manifest?.sizePercent || 100,
+      insertions: result.manifest?.insertionSteps || 0,
+      originalRatio: result.manifest?.originalRatio || 0.82,
     };
     runPhase = 'COMPLETED';
     notifyStatus(
@@ -554,6 +558,8 @@ async function runAnalysis(event, retryBusy = true) {
     compare: $('compare').checked,
     repeats: $('repeats').value,
     sizePercent: $('size-percent').value || '100',
+    insertions: $('insertion-steps').value,
+    originalRatio: $('original-ratio').value,
     kind: selected === 'paper' ? 'paper' : selected === 'upload' ? 'upload' : 'catalog',
   });
   if (selected === 'upload') {
@@ -604,6 +610,8 @@ async function runAnalysis(event, retryBusy = true) {
       fileModified: file?.lastModified ?? 0,
       repeats: Number($('repeats').value),
       sizePercent: Number($('size-percent').value || 100),
+      insertions: Number($('insertion-steps').value),
+      originalRatio: Number($('original-ratio').value),
     });
     return runPhase === 'COMPLETED';
   } catch (error) {
@@ -641,7 +649,7 @@ $('run-size-suite').onclick = async () => {
   if (state.busy || sizeSuiteRunning) return;
   sizeSuiteRunning = true;
   try {
-    for (const percent of [25, 50, 75, 100]) {
+    for (const percent of [20, 40, 60, 80, 100]) {
       $('size-percent').value = String(percent);
       notifyStatus('Thực nghiệm kích thước', percent + '% · giữ nguyên ngưỡng');
       const previous = state.current?.id;
@@ -655,6 +663,8 @@ $('run-size-suite').onclick = async () => {
   }
 };
 $('size-percent').addEventListener('change', updatePending);
+$('insertion-steps').addEventListener('change', updatePending);
+$('original-ratio').addEventListener('change', updatePending);
 $('export-zip').addEventListener('click', () => download('zip'));
 $('export').addEventListener('click', () => download('csv'));
 $('export-txt').addEventListener('click', () => download('txt'));
@@ -961,6 +971,7 @@ function renderAnalysis() {
   $('content').innerHTML =
     reportNote() +
     finalConclusion(state.current) +
+    insertionCharts(state.current) +
     `<nav class="analysis-guide" aria-label="Mục lục báo cáo"><strong class="subtle">Trong báo cáo:</strong><a href="#analysis-final">Kết luận cuối</a><span class="guide-arrow">·</span><a href="#analysis-summary">Tổng quan kết quả</a><span class="guide-arrow" aria-hidden="true">·</span><a href="#analysis-batches">Từng batch & re-scan</a><span class="guide-arrow" aria-hidden="true">·</span><a href="#analysis-patterns">Mẫu khai phá</a></nav><section id="analysis-summary" class="analysis-section" aria-labelledby="summary-title"><div class="analysis-heading"><div><h2 id="summary-title">Tổng quan kết quả</h2><p>Đọc nhanh dữ liệu, số mẫu và chi phí xử lý.</p></div></div><div id="summary-content"></div></section><details id="analysis-batches" class="analysis-section report-detail"><summary>Batch & điều kiện re-scan</summary><section aria-labelledby="batches-title"><div class="analysis-heading"><div><h2 id="batches-title">Từng batch & quyết định re-scan</h2><p>Utility, ngưỡng và lý do quét lại nằm ngay trong mỗi batch.</p></div></div><div id="batches-content"></div></section></details><section id="analysis-patterns" class="analysis-section" aria-labelledby="patterns-title"><div class="analysis-heading"><div><h2 id="patterns-title">Kết quả khai phá</h2><p>Mặc định xem batch cuối; lọc hoặc tìm mẫu ngay tại đây.</p></div></div><div id="patterns-content"></div></section>`;
   document.querySelector('.final-all').onclick = () => {
     state.batchIndex = state.current.report.batches.length - 1;
@@ -1132,106 +1143,159 @@ function renderSizeMeasurements() {
   );
 }
 
+function insertionCharts(c) {
+  const r = c.report;
+  const labels = r.batches.map(
+    (b) => num((100 * b.cumulativeTransactionCount) / r.transactionCount, 2) + '%',
+  );
+  const reports = c.comparison ? [c.comparison.tight, c.comparison.original] : [r];
+  const names = c.comparison ? ['PIHAUPA · Tight', 'PIHAUPA · Original'] : ['PIHAUPA · Tight'];
+  const series = (field) =>
+    reports.map((report, i) => ({
+      name: names[i],
+      color: i ? colors.amber : colors.blue,
+      values: report.batches.map(field),
+    }));
+  return `<div class="two-col equal-col">${card(
+    'Thời gian theo tiến trình chèn',
+    'Runtime · dạng đường như Fig. 8',
+    chart(
+      labels,
+      series((b) => b.elapsedMs / 1000),
+      {
+        kind: 'line',
+        unit: 's',
+        xLabel: 'Tiến trình chèn (%)',
+        yLabel: 'Thời gian mỗi batch (s)',
+        explanation:
+          'Mỗi điểm là thời gian xử lý một batch, gồm khai phá và re-scan nếu có; không gồm đọc tệp. Điểm đầu là DB0.',
+      },
+    ),
+  )}${card(
+    'Bộ nhớ theo tiến trình chèn',
+    'Memory usage · dạng cột như Fig. 9',
+    chart(
+      labels,
+      series((b) => b.peakMemoryMb * 1.048576),
+      {
+        unit: 'MB',
+        xLabel: 'Tiến trình chèn (%)',
+        yLabel: 'JVM heap lấy mẫu (MB)',
+        explanation:
+          'Đỉnh heap quan sát tích lũy đến từng batch; MB = 1.000.000 bytes. Đây là bộ nhớ JVM Java, khác phép đo C++ của bài báo.',
+      },
+    ),
+  )}</div>`;
+}
+
+function experimentHistoryCharts(c) {
+  const runs = state.history.filter(
+    (x) =>
+      x.source === c.source &&
+      x.manifest?.insertionSteps === c.manifest?.insertionSteps &&
+      x.manifest?.originalRatio === c.manifest?.originalRatio &&
+      x.measurement.repetitions === c.measurement.repetitions &&
+      (c.manifest?.hashKind !== 'raw-file-sha256' || x.manifest?.sha256 === c.manifest?.sha256),
+  );
+  const modes = [
+    [
+      'Theo ngưỡng trên',
+      'Sᵤ (%)',
+      runs
+        .filter(
+          (x) =>
+            x.report.lowerThreshold === c.report.lowerThreshold &&
+            x.report.transactionCount === c.report.transactionCount,
+        )
+        .sort((a, b) => b.report.upperThreshold - a.report.upperThreshold),
+      (x) => num(x.report.upperThreshold * 100, 4) + '%',
+    ],
+    [
+      'Theo kích thước dữ liệu',
+      'Số giao dịch',
+      runs
+        .filter(
+          (x) =>
+            x.report.upperThreshold === c.report.upperThreshold &&
+            x.report.lowerThreshold === c.report.lowerThreshold,
+        )
+        .sort((a, b) => a.report.transactionCount - b.report.transactionCount),
+      (x) => num(x.report.transactionCount, 0),
+    ],
+    [
+      'Độ nhạy hai ngưỡng',
+      'Sᵤ / Sₗ (%)',
+      runs.filter((x) => x.report.transactionCount === c.report.transactionCount),
+      (x) => num(x.report.upperThreshold * 100, 4) + ' / ' + num(x.report.lowerThreshold * 100, 4),
+    ],
+  ];
+  return modes
+    .map(
+      ([title, axis, points, label]) =>
+        `<details class="report-detail"><summary>${title} · ${points.length} lượt</summary>${points.length < 2 ? notice('Cần ít nhất 2 lượt cùng dữ liệu và điều kiện tương ứng. Chạy các ngưỡng hoặc kích thước khác nhau để có số đo so sánh.') : `<div class="two-col equal-col">${card('Thời gian chạy', 'Runtime · s', chart(points.map(label), [{ name: 'PIHAUPA · Tight', color: colors.blue, values: points.map((x) => x.report.elapsedMs / 1000) }], { kind: 'line', unit: 's', xLabel: axis, yLabel: 'Thời gian (s)' }))}${card('Bộ nhớ sử dụng', 'JVM heap · MB', chart(points.map(label), [{ name: 'Heap lấy mẫu', color: colors.blue, values: points.map((x) => x.measurement.heapPeakObservedMb * 1.048576) }], { unit: 'MB', xLabel: axis, yLabel: 'Bộ nhớ (MB)' }))}</div>`}</details>`,
+    )
+    .join('');
+}
+
 function renderMeasurements() {
   const c = state.current,
     r = c.report,
-    m = c.measurement,
-    labels = r.batches.map((b) => b.name);
+    m = c.measurement;
   $('content').innerHTML =
     reportNote() +
-    notice(
-      '<strong>Phạm vi phép đo:</strong> elapsedMs đo thời gian xử lý trong AnalysisReport.run; đọc tệp được đo riêng. Heap là đỉnh quan sát trước/sau batch, không phải RSS hay đỉnh bộ nhớ tuyệt đối. CPU là thời gian CPU của luồng thực hiện, không phải % CPU toàn máy.',
-    ) +
-    `<div class="kpi-grid resource-kpis">${kpi('Đọc + SHA-256', num(m.importMs), 'Không bao gồm thuật toán', 'datasets', 'ms')}${kpi('Thuật toán · median', num(r.elapsedMs), (m.repetitions || 1) + ' lượt · ' + num(m.minMs ?? r.elapsedMs) + '–' + num(m.maxMs ?? r.elapsedMs) + ' ms', 'clock', 'ms')}${kpi('CPU luồng khai phá', num(m.threadCpuMs), 'Tổng CPU các lượt + warm-up; không gồm đối chiếu', 'measurements', m.threadCpuMs == null ? '' : 'ms')}${kpi('JVM heap quan sát', num(m.heapPeakObservedMb), 'Lấy mẫu trước / sau mỗi batch', 'measurements', 'MiB')}${kpi('RAM tiến trình Java', m.resources?.processResidentMiBPeak == null ? 'Chưa đo' : num(m.resources.processResidentMiBPeak), 'Đỉnh lấy mẫu · không gồm JVM con', 'measurements', m.resources?.processResidentMiBPeak == null ? '' : 'MiB')}${kpi('RAM toàn máy đang dùng', m.resources?.systemUsedMiBPeak == null ? 'Chưa đo' : num(m.resources.systemUsedMiBPeak), 'Đỉnh lấy mẫu · tổng RAM: ' + (m.resources?.samples?.[0]?.systemTotalMiB == null ? '—' : num(m.resources.samples[0].systemTotalMiB) + ' MiB'), 'measurements', m.resources?.systemUsedMiBPeak == null ? '' : 'MiB')}</div>` +
-    `<div class="two-col equal-col">${card('Thời gian theo batch', 'Thời gian tường của processBatch', chart(labels, [{ name: 'Thuật toán', values: r.batches.map((b) => b.elapsedMs), color: colors.blue }], { unit: 'ms' }))}${card(
-      'JVM heap theo batch',
-      'MiB = bytes / 1.048.576 · không phải RSS',
-      chart(
-        labels,
+    `<div class="kpi-grid">${kpi('Thời gian chạy · median', num(r.elapsedMs / 1000), (m.repetitions || 1) + ' lượt · không gồm đọc tệp', 'clock', 's')}${kpi('Bộ nhớ sử dụng', num(m.heapPeakObservedMb * 1.048576), 'JVM heap · đỉnh lấy mẫu', 'measurements', 'MB')}${kpi('Số lần re-scan', num(r.stats.rescanCount, 0), 'Không tính quét ban đầu DB0', 'rescan')}${kpi('HAUP cuối', num(last(r).largePatterns.length, 0), 'AU(P) ≥ Sᵤ × TU(DB)', 'patterns')}</div>` +
+    insertionCharts(c) +
+    card(
+      'Thiết bị',
+      'Số đo lấy mẫu của máy đang chạy',
+      table(
         [
-          {
-            name: 'Trước batch',
-            values: r.batches.map((b) => b.memoryBeforeMb),
-            color: colors.slate,
-          },
-          { name: 'Sau batch', values: r.batches.map((b) => b.memoryAfterMb), color: colors.cyan },
-          {
-            name: 'Đỉnh quan sát tích lũy',
-            values: r.batches.map((b) => b.peakMemoryMb),
-            color: colors.blue,
-          },
+          'Đọc + SHA-256 (ms)',
+          'CPU luồng (ms)',
+          'RAM tiến trình Java (MiB)',
+          'RAM máy dùng (MiB)',
+          'CPU Java (%)',
+          'CPU máy (%)',
         ],
-        { kind: 'line', unit: 'MiB' },
+        [
+          tr([
+            num(m.importMs),
+            num(m.threadCpuMs),
+            num(m.resources?.processResidentMiBPeak),
+            num(m.resources?.systemUsedMiBPeak),
+            num(m.resources?.processCpuPercentPeak),
+            num(m.resources?.systemCpuPercentPeak),
+          ]),
+        ],
       ),
-    )}</div>` +
-    `<div class="two-col equal-col">${card('Các giai đoạn xử lý', 'Đọc / thuật toán: thời gian tường. CPU: thời gian CPU luồng khai phá.', chart(m.threadCpuMs == null ? ['Đọc dữ liệu', 'Thuật toán'] : ['Đọc dữ liệu', 'Thuật toán', 'CPU luồng'], [{ name: 'Thời gian', values: m.threadCpuMs == null ? [m.importMs, r.elapsedMs] : [m.importMs, r.elapsedMs, m.threadCpuMs], color: colors.blue }], { unit: 'ms' }))}${card('Khối lượng công việc của miner', 'Bộ đếm thuật toán; không phải thời gian xử lý', chart(['Mẫu đã duyệt', 'Nút kết hợp'], [{ name: 'Số lượng', values: [r.stats.patternsVisited, r.stats.combinedNodes], color: colors.slate }], { unit: 'lượt / nút' }))}</div>` +
-    renderResourceMeasurements(c) +
-    renderSizeMeasurements() +
-    manifestPanel(c) +
-    (c.comparison
-      ? renderComparison(c.comparison)
-      : notice(
-          'Để so sánh Original Eq. (5) và Tight Eq. (6), bật <strong>Đối chiếu Original / Tight</strong> rồi chạy lại. Hai chính sách được đo bằng các lượt thực thi riêng.',
-        )) +
-    `<section class="card history"><div class="card-head"><div><h2>Lịch sử phép đo trong phiên</h2><p>Tối đa 8 lượt · điều kiện ngưỡng được lưu cùng số liệu</p></div></div><div class="card-body">${chart(
-      state.history.map((c, i) => 'Lượt ' + (state.history.length - i)),
-      [
-        {
-          name: 'Thuật toán',
-          values: state.history.map((c) => c.report.elapsedMs),
-          color: colors.blue,
-        },
-      ],
-      { unit: 'ms' },
-    )}</div><div class="two-col equal-col"><div class="card-body">${chart(
-      state.history.map((c, i) => 'Lượt ' + (state.history.length - i)),
-      [
-        {
-          name: 'HAUP cuối',
-          values: state.history.map((c) => last(c.report).largePatterns.length),
-          color: colors.green,
-        },
-        {
-          name: 'PRE-LARGE',
-          values: state.history.map((c) => last(c.report).preLargePatterns.length),
-          color: colors.amber,
-        },
-      ],
-      { unit: 'mẫu', xLabel: 'Lượt chạy', yLabel: 'Số mẫu' },
-    )}</div><div class="card-body">${chart(
-      state.history.map((c, i) => 'Lượt ' + (state.history.length - i)),
-      [
-        {
-          name: 'Đỉnh heap lấy mẫu',
-          values: state.history.map((c) => c.measurement.heapPeakObservedMb),
-          color: colors.slate,
-        },
-      ],
-      { unit: 'MiB', xLabel: 'Lượt chạy', yLabel: 'JVM heap (MiB)' },
-    )}</div></div>${table(
+    ) +
+    `<details class="report-detail"><summary>Thiết lập thực nghiệm</summary><p>Trong Tùy chọn phân tích, chọn OR + 9 lần chèn để đo 10 mốc như Fig. 8–9. Thay Sᵤ với Sₗ cố định để đo theo ngưỡng; thay cả hai để đo độ nhạy. Chạy dãy kích thước để đo khả năng mở rộng.</p><p>Bài báo đo runtime, memory usage và số re-scan. Biểu đồ trên dùng batch thực tế của lượt hiện tại; không nội suy số liệu. Chỉ so sánh các chính sách Java đã chạy, không thay thế kết quả của các thuật toán đối chứng trong bài báo.</p></details>` +
+    experimentHistoryCharts(c) +
+    `<section class="card history"><div class="card-head"><h2>Kết quả thực nghiệm</h2></div>${table(
       [
         'Lượt',
         'Dữ liệu',
-        'Sᵤ / Sₗ',
+        'Sᵤ / Sₗ (%)',
         'Giao dịch',
-        'HAUP',
+        'Thời gian (s)',
+        'Heap (MB)',
         'Re-scan',
-        'Thuật toán (ms)',
-        'Heap (MiB)',
+        'HAUP',
       ],
-      state.history.map((c, i) =>
+      state.history.map((x, i) =>
         tr([
           `<button class="button history-open" data-index="${i}">Mở ${state.history.length - i}</button>`,
-          esc(c.source),
-          num(c.report.upperThreshold, 17) + ' / ' + num(c.report.lowerThreshold, 17),
-          num(c.report.transactionCount, 0),
-          last(c.report).largePatterns.length,
-          c.report.stats.rescanCount,
-          num(c.report.elapsedMs),
-          num(c.measurement.heapPeakObservedMb),
+          esc(x.source),
+          num(x.report.upperThreshold * 100, 4) + ' / ' + num(x.report.lowerThreshold * 100, 4),
+          num(x.report.transactionCount, 0),
+          num(x.report.elapsedMs / 1000, 3),
+          num(x.measurement.heapPeakObservedMb * 1.048576),
+          num(x.report.stats.rescanCount, 0),
+          num(last(x.report).largePatterns.length, 0),
         ]),
       ),
-    )}</section>`;
+    )}</section>` +
+    `<details class="report-detail"><summary>Thiết bị & số đo chi tiết</summary>${renderResourceMeasurements(c)}${renderSizeMeasurements()}${manifestPanel(c)}${c.comparison ? renderComparison(c.comparison) : ''}</details>`;
   $('export-sizes').onclick = () => {
     const runs = state.history.filter(
       (run) =>
@@ -1666,6 +1730,8 @@ async function renderRuns() {
           applyThresholdMode();
           $('repeats').value = c.manifest?.measuredRuns || 1;
           $('size-percent').value = c.manifest?.sizePercent || 100;
+          $('insertion-steps').value = c.manifest?.insertionSteps || 0;
+          $('original-ratio').value = c.manifest?.originalRatio || 0.82;
           $('format').value = c.manifest?.format || 'transactions';
           $('compare').checked = !!c.manifest?.comparison;
           c.configuration = {
@@ -1675,6 +1741,8 @@ async function renderRuns() {
             format: $('format').value,
             fileModified: 0,
             sizePercent: c.manifest?.sizePercent || 100,
+            insertions: c.manifest?.insertionSteps || 0,
+            originalRatio: c.manifest?.originalRatio || 0.82,
           };
           thresholdLabels();
           state.batchIndex = c.report.batches.length - 1;

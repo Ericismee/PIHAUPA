@@ -23,15 +23,18 @@ public final class ReportArchive {
         files.put("bao-cao.csv",ExportBundle.reportCsv(job.external,r,job.source));
         files.put("patterns.csv",ReportWriter.patternsCsv(r));
         files.put("performance-by-rows.csv",ReportWriter.performanceCsv(r));
+        StringBuilder insertionCsv=new StringBuilder("batch,insertionProgressPercent,transactions,runtimeSeconds,heapPeakMB,rescan\n");
+        for(var batch:r.batches())insertionCsv.append(batch.name()).append(',').append(100.0*batch.cumulativeTransactionCount()/r.transactionCount()).append(',').append(batch.cumulativeTransactionCount()).append(',').append(batch.elapsedMs()/1000.0).append(',').append(batch.peakMemoryMb()*1.048576).append(',').append(batch.rescanTriggered()).append('\n');
+        files.put("insertion-performance.csv",insertionCsv.toString());
         files.put("upper-bounds.csv",ExportBundle.upperBoundsCsv(r));
         files.put("report.json",job.result);
         files.put("measurements.csv",job.measurementCsv);
         files.put("process.log",String.join("\n",job.logLines())+"\n");
         files.put("resources.json",Json.encode(job.measurements.get("resources")));
-        StringBuilder resourceCsv=new StringBuilder("elapsedMs,heapUsedMiB,heapCommittedMiB,processResidentMiB,systemUsedMiB,systemTotalMiB\n");
+        StringBuilder resourceCsv=new StringBuilder("elapsedMs,heapUsedMiB,heapCommittedMiB,processResidentMiB,systemUsedMiB,systemTotalMiB,processCpuPercent,systemCpuPercent\n");
         if(job.measurements.get("resources") instanceof Map<?,?> resources && resources.get("samples") instanceof List<?> samplesList)
             for(Object entry:samplesList)if(entry instanceof Map<?,?> sample){
-                for(String key:List.of("elapsedMs","heapUsedMiB","heapCommittedMiB","processResidentMiB","systemUsedMiB","systemTotalMiB"))resourceCsv.append(sample.get(key)==null?"":sample.get(key)).append(',');
+                for(String key:List.of("elapsedMs","heapUsedMiB","heapCommittedMiB","processResidentMiB","systemUsedMiB","systemTotalMiB","processCpuPercent","systemCpuPercent"))resourceCsv.append(sample.get(key)==null?"":sample.get(key)).append(',');
                 resourceCsv.setLength(resourceCsv.length()-1);resourceCsv.append('\n');
             }
         files.put("resource-samples.csv",resourceCsv.toString());
@@ -75,7 +78,7 @@ public final class ReportArchive {
         if(job.measurements.get("resources") instanceof Map<?,?> resources && resources.get("samples") instanceof List<?> list){
             html.append("<h2>Số đo RAM (MiB)</h2><p>Đỉnh heap: ").append(h(resources.get("heapUsedMiBPeak"))).append(" · Đỉnh RAM tiến trình: ").append(h(resources.get("processResidentMiBPeak"))).append(" · Đỉnh RAM toàn máy dùng: ").append(h(resources.get("systemUsedMiBPeak"))).append("</p>");
             html.append("<table><tr><th>Thời điểm (ms)</th><th>Heap (MiB)</th><th>RAM Java (MiB)</th><th>RAM máy dùng (MiB)</th><th>Tổng RAM máy (MiB)</th></tr>");
-            for(Object entry:list)if(entry instanceof Map<?,?> row){html.append("<tr>");for(String key:List.of("elapsedMs","heapUsedMiB","processResidentMiB","systemUsedMiB","systemTotalMiB"))html.append("<td>").append(row.get(key)==null?"Chưa đo":h(row.get(key))).append("</td>");html.append("</tr>");}
+            for(Object entry:list)if(entry instanceof Map<?,?> row){html.append("<tr>");for(String key:List.of("elapsedMs","heapUsedMiB","processResidentMiB","systemUsedMiB","systemTotalMiB","processCpuPercent","systemCpuPercent"))html.append("<td>").append(row.get(key)==null?"Chưa đo":h(row.get(key))).append("</td>");html.append("</tr>");}
             html.append("</table><p>Lấy mẫu khoảng 1 giây; không gồm RAM JVM con; RAM toàn máy gồm mọi ứng dụng. Chi tiết trong resource-samples.csv.</p>");
         }
         html.append("<h2>Đo lường của lượt chạy</h2><pre>").append(h(job.measurementCsv)).append("</pre>");

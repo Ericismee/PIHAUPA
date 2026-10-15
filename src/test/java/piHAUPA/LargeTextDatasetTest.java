@@ -22,9 +22,28 @@ public final class LargeTextDatasetTest {
         String exported = ExportBundle.reportText(input, report, "test/transactions.txt");
         check(exported.contains("Su = 0.500000") && !exported.contains("Original"), "single-policy export");
         check(ExportBundle.reportCsv(input, report, "test").contains("\"AUUB\",\"2\""), "AUUB CSV");
+        verifiesInsertionPartition();
         verifiesCompactStorageAgainstMapAndOracle();
         verifiesNumericParsingAndSinglePassHash();
         System.out.println("Large TXT test passed.");
+    }
+
+    private static void verifiesInsertionPartition() throws Exception {
+        var source=new vn.edu.dlu.pihaupa.application.InputSource(){
+            public String name(){return "partition-test";}
+            public InputData read(double su,double sl,java.util.function.Consumer<String> log)throws java.io.IOException{
+                StringBuilder text=new StringBuilder();for(int i=0;i<100;i++)text.append("1:1:1\n");
+                return ArchiveDatasetReader.readTransactionsText(new StringReader(text.toString()),name(),su,sl,log);
+            }
+        };
+        var input=vn.edu.dlu.pihaupa.application.InputSource.insertion(source,9,.82).read(.3,.1,x->{});
+        check(input.batches().size()==10,"initial plus nine insertions");
+        check(input.batches().get(0).transactions().size()==82,"OR 82 percent");
+        var rows=input.batches().stream().flatMap(b->b.transactions().stream()).toList();
+        check(rows.size()==100 && rows.stream().map(Transaction::tid).distinct().count()==100,"all rows once");
+        check(vn.edu.dlu.pihaupa.application.InputSource.insertion(source,0,.82)==source,"default partition unchanged");
+        try{vn.edu.dlu.pihaupa.application.InputSource.insertion(source,9,.998).read(.3,.1,x->{});throw new AssertionError("small input must fail");}
+        catch(IllegalArgumentException expected){check(expected.getMessage().contains("Không đủ"),"clear partition error");}
     }
 
     private static void verifiesCompactStorageAgainstMapAndOracle() throws Exception {
