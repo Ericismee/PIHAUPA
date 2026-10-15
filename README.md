@@ -403,3 +403,8 @@ Trong **Tùy chọn & giải thích**, chọn 25/50/75/100% hoặc bấm **Thự
 - Các đỉnh là đỉnh quan sát, có thể bỏ lỡ spike; các lượt dùng chung JVM và bộ nhớ còn lại từ lượt trước. JVM con Original/Tight không nằm trong RAM tiến trình server. Lấy mẫu tài nguyên có overhead; testcase heap chỉ chụp trước/sau action, không phải allocation hay peak riêng.
 
 **Đo lường & biểu đồ** hiển thị RAM Java/RAM toàn máy ngay trong dãy thẻ số liệu, bảng runtime/heap từng lượt và từng kích thước, cùng CSV so sánh. Phần tài nguyên/kích thước bổ sung dùng con số và bảng, không dùng biểu đồ. ZIP từng lượt thêm `resources.json`, `resource-samples.csv`, `run-measurements.json/csv`; testcase ZIP chứa memoryBefore/memoryAfter trong JSON và các cột heap/system trong CSV. API nhận `sizePercent=25|50|75|100` (mặc định 100). Kiểm tra bằng `python scripts/verify-resources.py --url http://localhost:8017` trên server thử nghiệm. Thực nghiệm kích thước đánh giá hành vi/hiệu năng, không tự xác nhận tính đúng của tập dữ liệu lớn; oracle độc lập vẫn chỉ áp dụng phạm vi dữ liệu nhỏ được hỗ trợ.
+
+
+### Nhật ký quy trình
+
+Nhật ký hiển thị ngay dưới cấu hình, tự mở khi bắt đầu và thu gọn khi hoàn tất. Mỗi dòng có thời gian tương đối từ đầu job, chính sách và batch: kiểm tra TU/MU → quyết định re-scan (hai vế điều kiện) → xây PIHAUP-List → tái cấu trúc AUUB/MRU/MRN → mở rộng/cắt tỉa → xây hoặc cập nhật PT → oracle → đối chiếu → lưu báo cáo. Khi mở rộng lâu, cập nhật số mẫu đã duyệt/nút kết hợp khoảng 2 giây, kiểm tra tại các mốc 1.024 mẫu; đây không phải % hoàn thành hay ETA. Giữ 500 dòng gần nhất để giới hạn bộ nhớ. ZIP có `process.log`; report.json có `processLog` chụp trước khi lưu hồ sơ, nên không chứa sự kiện sau thời điểm lưu.

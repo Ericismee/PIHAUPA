@@ -65,6 +65,7 @@ public record AnalysisReport(
                     + " giao dịch tích lũy)");
             long memoryBefore = usedMemory();
             long batchStarted = System.nanoTime();
+            miner.setProgress(line -> progress.accept(policy+" · "+batch.name()+" · "+line));
             BatchResult result = miner.processBatch(batch);
             long batchElapsed = System.nanoTime() - batchStarted;
             long memoryAfter = usedMemory();

@@ -13,6 +13,11 @@ import java.util.TreeSet;
 import java.util.concurrent.CancellationException;
 
 public final class PiHaupaMiner {
+    private java.util.function.Consumer<String> progress = ignored -> {};
+    private long lastProgressNanos;
+    public void setProgress(java.util.function.Consumer<String> progress) { this.progress = progress; }
+    private void reportProgress(String message) { progress.accept(message); }
+
     private final Map<String, Double> externalUtilities;
     private final boolean unitExternalUtilities;
     private final double upperThreshold;
@@ -65,6 +70,7 @@ public final class PiHaupaMiner {
 
     public BatchResult processBatch(Batch batch) {
         checkCancelled();
+        reportProgress("01 · Kiểm tra giao dịch và tính TU/MU, AUUB.");
         validateBatch(batch);
         double batchTU = 0.0;
         double batchMU = 0.0;
@@ -127,6 +133,11 @@ public final class PiHaupaMiner {
             triggered = rescanPolicy == RescanPolicy.TIGHT
                     ? tightRescanConditionMet()
                     : insertedTransactionUtility >= originalLimit;
+            double left = rescanPolicy == RescanPolicy.TIGHT
+                    ? insertedMaximumUtility-upperThreshold*insertedTransactionUtility
+                    : (1-upperThreshold)*insertedTransactionUtility;
+            double right = (upperThreshold-lowerThreshold)*utilityAtLastRescan;
+            reportProgress("02 · Điều kiện "+rescanPolicy+": trái="+left+", phải="+right+" → "+(triggered?"RE-SCAN":"KHÔNG RE-SCAN"));
             if (triggered) {
                 rescanCount++;
                 rebuildPatternTree();
@@ -136,6 +147,7 @@ public final class PiHaupaMiner {
                 action = (rescanPolicy == RescanPolicy.TIGHT ? "TIGHT" : "ORIGINAL")
                         + " RE-SCAN + FULL PATTERN EXPANSION";
             } else {
+                reportProgress("03 · Cập nhật tiện ích các mẫu đã lưu trong PT.");
                 updateManagedPatterns(batch.transactions());
                 action = "NO RE-SCAN: UPDATE EXISTING PATTERN TREE";
             }
@@ -162,12 +174,18 @@ public final class PiHaupaMiner {
     private void rebuildPatternTree() {
         patternTree.clear();
         if (allCandidatesBelowLowerBound()) {
+            reportProgress("03 · Mọi AUUB đều dưới ngưỡng PRE-LARGE; không cần mở rộng, PT rỗng.");
             managedPatternTrie.rebuild(patternTree);
             return;
         }
+        reportProgress("03 · Xây dựng PIHAUP-List trên "+allTransactions.size()+" giao dịch.");
         ListNodeList globalList = constructGlobalList(allTransactions);
+        reportProgress("04 · Sắp xếp AUUB, tính MRU/MRN cho "+globalList.nodes().size()+" item.");
         restructure(globalList.nodes());
+        reportProgress("05 · Mở rộng mẫu và cắt tỉa AUUB/MAU; đang tìm LARGE/PRE-LARGE.");
+        lastProgressNanos=System.nanoTime();
         patternExpansion(globalList.nodes(), new ArrayList<>());
+        reportProgress("06 · Hoàn tất mở rộng; xây PT từ "+patternTree.size()+" mẫu đang giữ.");
         managedPatternTrie.rebuild(patternTree);
     }
 
@@ -235,6 +253,10 @@ public final class PiHaupaMiner {
             List<String> pattern = new ArrayList<>(prefix);
             pattern.add(node.item);
             patternsVisited++;
+            if ((patternsVisited & 1023) == 0 && System.nanoTime()-lastProgressNanos >= 2_000_000_000L) {
+                reportProgress("05 · Đang mở rộng: đã duyệt "+patternsVisited+" mẫu, kết hợp "+combinedNodes+" nút; PT giữ "+patternTree.size()+" mẫu. Chưa hoàn tất.");
+                lastProgressNanos=System.nanoTime();
+            }
 
             double averageUtility = node.sumUtility / pattern.size();
             if (averageUtility >= lower) {

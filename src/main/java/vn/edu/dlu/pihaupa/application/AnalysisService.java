@@ -65,7 +65,9 @@ public final class AnalysisService implements AutoCloseable {
                 job.phase = "REPORTING";
                 long afterCpu = beforeCpu >= 0 ? cpu.getCurrentThreadCpuTime() : -1;
                 job.checkCancelled();
+                job.log("Kiểm chứng: đối chiếu oracle độc lập nếu dữ liệu trong phạm vi hỗ trợ.");
                 job.oracle=SmallDataOracle.verify(input,report);
+                job.log("Oracle: "+job.oracle.get("state"));
                 job.external = input.externalUtilities();
                 job.report = report;
                 String comparison = "null";
@@ -100,7 +102,7 @@ public final class AnalysisService implements AutoCloseable {
                 job.manifest.put("haups",report.batches().get(report.batches().size()-1).largePatterns().size());job.manifest.put("rows",report.transactionCount());job.manifest.put("medianMs",report.elapsedNanos()/1e6);job.manifest.put("comparison",compare);job.manifest.put("comparisonIsolation",compare?"one-child-jvm-per-policy":"not-run");job.manifest.put("oracle",job.oracle);
                 job.result = "{\"id\":"+Json.encode(job.id)+",\"source\":"+Json.encode(job.source)
                         +",\"createdAt\":"+Json.encode(job.createdAt)+",\"report\":"+report.toJson()
-                        +",\"manifest\":"+Json.encode(job.manifest)+",\"oracle\":"+Json.encode(job.oracle)+",\"measurement\":"+Json.encode(measurements)+",\"preview\":"+Json.encode(preview)
+                        +",\"processLog\":"+Json.encode(job.logLines())+",\"manifest\":"+Json.encode(job.manifest)+",\"oracle\":"+Json.encode(job.oracle)+",\"measurement\":"+Json.encode(measurements)+",\"preview\":"+Json.encode(preview)
                         +",\"externalUtilities\":"+Json.encode(input.externalUtilities().entrySet().stream().limit(30)
                             .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey,Map.Entry::getValue)))
                         +",\"comparison\":"+comparison+"}";
@@ -171,9 +173,10 @@ public final class AnalysisService implements AutoCloseable {
         private final ArrayDeque<String> lines = new ArrayDeque<>();
         Job(String id, String source) { this.id=id; this.source=source; }
         private void fail(Throwable cause){AppError info=AppError.from(cause);error=info.message();errorCode=info.code();errorAction=info.action();}
-        synchronized void log(String line) { checkCancelled(); if (lines.size() >= 100) lines.removeFirst(); lines.addLast(line);
+        synchronized void log(String line) { checkCancelled(); if (lines.size() >= 500) lines.removeFirst(); lines.addLast(String.format(java.util.Locale.ROOT,"[+%.2f s] %s",(System.nanoTime()-startedNanos)/1e9,line));
             var matcher=java.util.regex.Pattern.compile("đã đọc ([0-9]+) giao dịch").matcher(line.toLowerCase(java.util.Locale.ROOT));if(matcher.find())rowsRead=Math.max(rowsRead,Long.parseLong(matcher.group(1)));
         }
+        public synchronized List<String> logLines(){return List.copyOf(lines);}
         private synchronized double sampleHeap() {
             Runtime runtime = Runtime.getRuntime();
             double used = (runtime.totalMemory()-runtime.freeMemory())/1048576.;

@@ -26,6 +26,7 @@ public final class ReportArchive {
         files.put("upper-bounds.csv",ExportBundle.upperBoundsCsv(r));
         files.put("report.json",job.result);
         files.put("measurements.csv",job.measurementCsv);
+        files.put("process.log",String.join("\n",job.logLines())+"\n");
         files.put("resources.json",Json.encode(job.measurements.get("resources")));
         StringBuilder resourceCsv=new StringBuilder("elapsedMs,heapUsedMiB,heapCommittedMiB,processResidentMiB,systemUsedMiB,systemTotalMiB\n");
         if(job.measurements.get("resources") instanceof Map<?,?> resources && resources.get("samples") instanceof List<?> samplesList)

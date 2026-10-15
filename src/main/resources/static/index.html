@@ -225,10 +225,6 @@
                 </div>
                 <div id="phase-trail" class="phase-trail" hidden></div>
                 <div id="status" class="run-status" role="status" aria-live="polite" hidden></div>
-                <details id="progress-panel" class="progress" hidden>
-                  <summary>Nhật ký xử lý</summary>
-                  <pre id="progress-log"></pre>
-                </details>
               </div>
             </details>
           </form>
@@ -238,6 +234,11 @@
             ><span id="live-heap">Heap: —</span>
           </div>
         </section>
+        <details id="progress-panel" class="progress process-log" hidden open>
+          <summary>Nhật ký quy trình chạy</summary>
+          <p id="current-operation" role="status" aria-live="polite">Chưa chạy.</p>
+          <pre id="progress-log" aria-label="Nhật ký xử lý theo thời gian"></pre>
+        </details>
         <div id="status-toast" class="status-toast" role="status" aria-live="polite" hidden></div>
         <div id="error" class="alert error" role="alert" hidden></div>
         <div id="content"></div>

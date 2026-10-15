@@ -136,6 +136,8 @@ const phases = {
 };
 
 function showJobStatus(status) {
+  $('current-operation').textContent = status.lines?.at(-1) || 'Đang chờ phản hồi từ Java…';
+  $('progress-log').textContent = (status.lines || []).join('\n');
   const phase = status.phase === 'COMPLETED' ? 'REPORTING' : status.phase;
   setRunPhase(phase);
   if (status.phase !== lastJobPhase) {
@@ -391,6 +393,7 @@ async function runAnalysis(event) {
   $('status').hidden = false;
   $('status').textContent = 'Đang nạp dữ liệu và chuẩn bị phân tích…';
   $('progress-panel').hidden = false;
+  $('progress-panel').open = true;
   $('progress-log').textContent = '';
   $('export-zip').disabled = true;
   $('export').disabled = true;
@@ -455,6 +458,7 @@ async function runAnalysis(event) {
       'success',
     );
     state.current = result;
+    $('progress-panel').open = false;
     state.patternSearch = '';
     state.patternType = 'ALL';
     state.patternPage = 0;
@@ -582,7 +586,7 @@ function render() {
   const analysis = state.page === 'overview';
   $('run-panel').hidden = !analysis;
   $('status').hidden = !analysis || !$('status').textContent;
-  $('progress-panel').hidden = !analysis || !$('progress-log').textContent;
+  $('progress-panel').hidden = !$('progress-log').textContent;
   const [title, description] = pages[state.page];
   $('page-title').textContent = title;
   $('page-description').textContent = description;
@@ -1495,6 +1499,9 @@ async function renderRuns() {
           const c = await request('/api/runs/' + button.dataset.id);
           c.archived = true;
           state.current = c;
+          $('progress-log').textContent = (c.processLog || []).join('\n');
+          $('current-operation').textContent =
+            c.processLog?.at(-1) || 'Lượt lưu cũ chưa có nhật ký.';
           const selected =
             c.source === 'Bài báo · Tables 2–3'
               ? 'paper'
