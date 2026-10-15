@@ -254,7 +254,10 @@
           </div>
         </section>
         <details id="progress-panel" class="progress process-log" hidden open>
-          <summary>Nhật ký quy trình chạy</summary>
+          <summary>
+            Nhật ký quy trình chạy
+            <span id="run-elapsed-summary" class="run-elapsed">00:00:00</span>
+          </summary>
           <div class="run-progress-header">
             <strong id="run-progress-label">Đang chuẩn bị…</strong
             ><span id="run-progress-count"></span
@@ -266,6 +269,7 @@
           <p class="subtle" id="run-progress-note">
             Tiến độ theo mốc xử lý, không phải phần trăm thời gian.
           </p>
+          <p id="run-workload" class="run-workload" hidden></p>
           <p id="current-operation" role="status" aria-live="polite">Chưa chạy.</p>
           <pre id="progress-log" aria-label="Nhật ký xử lý theo thời gian"></pre>
         </details>

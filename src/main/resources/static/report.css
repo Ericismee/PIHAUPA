@@ -690,3 +690,24 @@ main {
 .chart-workings .evidence-steps {
   font-size: 12px;
 }
+
+.run-elapsed {
+  display: inline-block;
+  margin-left: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  background: #eef3fa;
+  color: #34547b;
+  padding: 4px 9px;
+  border-radius: 6px;
+}
+.run-workload {
+  color: #526783;
+  background: #f5f8fc;
+  border-left: 3px solid #c1d1e8;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}

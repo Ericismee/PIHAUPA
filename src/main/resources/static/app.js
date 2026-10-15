@@ -129,7 +129,33 @@ const phases = {
   CANCELLED: 'Đã hủy',
 };
 
+function formatRunDuration(milliseconds) {
+  const seconds = Math.max(0, Math.floor((milliseconds || 0) / 1000));
+  return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+    .map((value) => String(value).padStart(2, '0'))
+    .join(':');
+}
+
 function updateRunProgress(status) {
+  $('run-elapsed-summary').textContent =
+    status.elapsedMs == null && status.state === 'COMPLETED'
+      ? 'Tổng: —'
+      : (status.state === 'RUNNING' ? 'Đã chạy ' : 'Tổng: ') + formatRunDuration(status.elapsedMs);
+  const latest = status.lines?.at(-1) || '';
+  const workload = latest.match(/đã duyệt (\d+) mẫu, kết hợp (\d+) nút; PT giữ (\d+) mẫu/);
+  $('run-workload').hidden = !workload;
+  if (workload)
+    $('run-workload').textContent =
+      'Đã duyệt ' +
+      num(Number(workload[1]), 0) +
+      ' mẫu · ' +
+      num(Number(workload[2]), 0) +
+      ' phép ghép · PT giữ ' +
+      num(Number(workload[3]), 0) +
+      ' mẫu' +
+      (Number(workload[1]) >= 100000
+        ? '. Đang mở rộng nhiều ứng viên; số giữ trong PT không phải số HAUP cuối. Chưa xác định thời gian còn lại.'
+        : '');
   const percent = status.progressPercent;
   const bar = $('run-progress-bar');
   const terminal = ['FAILED', 'CANCELLED'].includes(status.state);

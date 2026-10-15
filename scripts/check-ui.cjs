@@ -257,3 +257,13 @@ console.log('PASS determinate and completed progress states');
   console.error(error);
   process.exitCode = 1;
 });
+
+vm.runInContext(
+  `
+if (formatRunDuration(0) !== '00:00:00' || formatRunDuration(900000) !== '00:15:00' || formatRunDuration(3601000) !== '01:00:01') throw Error('Elapsed clock format');
+updateRunProgress({state:'RUNNING',elapsedMs:900000,lines:['đã duyệt 1704960 mẫu, kết hợp 1705103 nút; PT giữ 336 mẫu'],progressPercent:16,completedSteps:1,totalSteps:6});
+if (!$('run-elapsed-summary').textContent.includes('00:15:00') || $('run-workload').hidden) throw Error('Live elapsed/workload missing');
+`,
+  ctx,
+);
+console.log('PASS elapsed log clock and mining workload');
