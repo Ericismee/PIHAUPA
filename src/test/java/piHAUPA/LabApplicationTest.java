@@ -64,6 +64,7 @@ public final class LabApplicationTest {
                 while (job.state.equals("RUNNING") && System.nanoTime()<deadline) Thread.sleep(20);
                 if (!job.state.equals("COMPLETED") || job.result==null || !job.result.contains("\"sameHaups\":true"))
                     throw new AssertionError(job.status());
+                if(!job.status().contains("\"progressPercent\":100") || !job.status().contains("\"completedSteps\":7") || !job.status().contains("\"totalSteps\":7"))throw new AssertionError("Incorrect completed progress: "+job.status());
                 var archive=ReportArchive.analysis(job);
                 if(!archive.keySet().containsAll(java.util.List.of("BAO_CAO.html","patterns.csv","performance-by-rows.csv","upper-bounds.csv","report.json","measurements.csv","comparison.csv","manifest.json","verification.json","timing-samples.csv")))throw new AssertionError("Missing archive files");
                 if(!archive.get("BAO_CAO.html").contains("<svg") || !archive.get("measurements.csv").contains("threadCpuMs"))throw new AssertionError("Missing chart or CPU measurement");

@@ -135,7 +135,35 @@ const phases = {
   CANCELLED: 'Đã hủy',
 };
 
+function updateRunProgress(status) {
+  const percent = status.progressPercent;
+  const bar = $('run-progress-bar');
+  const terminal = ['FAILED', 'CANCELLED'].includes(status.state);
+  if (percent == null && terminal) bar.value = 0;
+  else if (percent == null) bar.removeAttribute('value');
+  else bar.value = percent;
+  $('run-progress-label').textContent =
+    status.state === 'COMPLETED'
+      ? '100% · Hoàn tất'
+      : terminal
+        ? (status.state === 'CANCELLED' ? 'Đã hủy' : 'Có lỗi') +
+          (percent == null ? '' : ' · ' + percent + '%')
+        : status.phase === 'CANCELLING'
+          ? 'Đang hủy…'
+          : percent == null
+            ? 'Đang đọc và kiểm tra dữ liệu…'
+            : percent + '% · Đang xử lý';
+  $('run-progress-count').textContent = status.totalSteps
+    ? status.completedSteps + '/' + status.totalSteps + ' mốc'
+    : 'Chưa xác định tổng mốc';
+  $('run-progress-note').textContent =
+    status.progressBasis ||
+    'Tiến độ theo mốc xử lý; không phải phần trăm thời gian hoặc số mẫu đã duyệt.';
+  bar.dataset.state = status.state;
+}
+
 function showJobStatus(status) {
+  updateRunProgress(status);
   $('current-operation').textContent = status.lines?.at(-1) || 'Đang chờ phản hồi từ Java…';
   $('progress-log').textContent = (status.lines || []).join('\n');
   const phase = status.phase === 'COMPLETED' ? 'REPORTING' : status.phase;
@@ -394,6 +422,7 @@ async function runAnalysis(event) {
   $('status').textContent = 'Đang nạp dữ liệu và chuẩn bị phân tích…';
   $('progress-panel').hidden = false;
   $('progress-panel').open = true;
+  updateRunProgress({ state: 'RUNNING', progressPercent: null, completedSteps: 0, totalSteps: 0 });
   $('progress-log').textContent = '';
   $('export-zip').disabled = true;
   $('export').disabled = true;
@@ -1499,6 +1528,13 @@ async function renderRuns() {
           const c = await request('/api/runs/' + button.dataset.id);
           c.archived = true;
           state.current = c;
+          updateRunProgress({
+            state: 'COMPLETED',
+            progressPercent: 100,
+            totalSteps: 0,
+            completedSteps: 0,
+            progressBasis: 'Lượt lưu đã hoàn tất; không phát lại tiến độ.',
+          });
           $('progress-log').textContent = (c.processLog || []).join('\n');
           $('current-operation').textContent =
             c.processLog?.at(-1) || 'Lượt lưu cũ chưa có nhật ký.';

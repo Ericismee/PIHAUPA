@@ -436,3 +436,8 @@ Parser `transactions.txt` lưu item thành `int[]`, utility thành `double[]`, d
 Đo bổ sung cùng cấu hình benchmark bên trên: NewConnects đọc/mining median 1.144,002/807,574 ms; NewMushroom 66,725/409,943 ms. Chữ ký mọi batch trùng bản trước. Lợi ích chính là giảm heap giữ dữ liệu: với NewConnects, phép đo chẩn đoán sau GC trong JVM riêng giữ InputData sống cho thấy 216.134.144 → 72.930.152 bytes (khoảng 206,1 → 69,6 MiB, giảm 66%). Đây là heap giữ input sau GC, không phải RSS hoặc peak của toàn pipeline; GC này chỉ nằm trong công cụ benchmark, không thêm vào web.
 
 30 luồng dữ liệu nhỏ ngẫu nhiên kiểm tra cả Original/Tight: array và Map có cùng LARGE/PRE-LARGE ở mọi batch, cùng re-scan và khớp oracle vét cạn. Kiểm tra Map view/entry không sửa được. Tái đo heap giữ input bằng tham số thứ tư `retained` của PipelineBenchmark. Chưa bật cache toàn bộ input hoặc song song miner: chúng có thể tăng RAM/overhead và cần thực nghiệm riêng trước khi áp dụng.
+
+
+### Thanh tiến độ
+
+Thanh % trong Nhật ký tính theo mốc thực sự đã hoàn tất: 1 mốc đọc/kiểm tra/hash, mỗi batch của mỗi lượt Tight (gồm warm-up), 1 mốc oracle, 1 mốc đối chiếu nếu bật, 1 mốc hoàn tất báo cáo. Trước khi biết số batch, thanh chưa xác định %. Trong lúc mở rộng mẫu, % có thể đứng yên và log vẫn cập nhật số mẫu đã duyệt; không suy ra % thời gian còn lại hoặc ETA. Chỉ job COMPLETED mới đạt 100%; lỗi/hủy giữ mức đã đạt và ghi trạng thái rõ ràng.

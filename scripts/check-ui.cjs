@@ -172,3 +172,12 @@ if (fs.existsSync('tmp/resource-result.json')) {
     throw Error('Missing numeric metrics');
   console.log('PASS numeric RAM/runtime tables without charts');
 }
+
+ctx.progress = { state: 'RUNNING', progressPercent: 40, completedSteps: 2, totalSteps: 5 };
+vm.runInContext('updateRunProgress(progress)', ctx);
+if (el('run-progress-bar').value !== 40 || !el('run-progress-count').textContent.includes('2/5'))
+  throw Error('Progress ratio');
+ctx.progress = { state: 'COMPLETED', progressPercent: 100, completedSteps: 5, totalSteps: 5 };
+vm.runInContext('updateRunProgress(progress)', ctx);
+if (!el('run-progress-label').textContent.includes('100%')) throw Error('Completed progress');
+console.log('PASS determinate and completed progress states');

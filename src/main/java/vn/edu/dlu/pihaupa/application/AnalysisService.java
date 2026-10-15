@@ -41,10 +41,13 @@ public final class AnalysisService implements AutoCloseable {
                 job.log("Đang đọc và kiểm tra dữ liệu đầu vào…");
                 InputData input = source.read(su, sl, job::log);
                 job.checkCancelled();
+                job.totalSteps = 1 + input.batches().size() * (repeats + (repeats > 1 ? 1 : 0)) + 1 + (compare ? 1 : 0) + 1;
+                // Tổng mốc xác định sau khi biết số batch; đọc/hash chưa được tính xong.
                 job.manifest=new LinkedHashMap<>(ExperimentProfile.capture(source,input,repeats));
                 job.manifest.put("id",job.id);job.manifest.put("createdAt",job.createdAt);
                 job.checkCancelled();
                 long imported = System.nanoTime();
+                job.completedSteps = 1;
                 job.importMs = (imported-start)/1e6;
                 job.log("Đọc hoàn tất: " + input.batches().stream().mapToInt(b -> b.transactions().size()).sum()
                         + " giao dịch. Bắt đầu khai phá PIHAUPA.");
@@ -67,6 +70,7 @@ public final class AnalysisService implements AutoCloseable {
                 job.checkCancelled();
                 job.log("Kiểm chứng: đối chiếu oracle độc lập nếu dữ liệu trong phạm vi hỗ trợ.");
                 job.oracle=SmallDataOracle.verify(input,report);
+                job.completedSteps++;
                 job.log("Oracle: "+job.oracle.get("state"));
                 job.external = input.externalUtilities();
                 job.report = report;
@@ -76,6 +80,7 @@ public final class AnalysisService implements AutoCloseable {
                     job.log("Đối chiếu Original/Tight: mỗi chính sách trong JVM con riêng.");
                     IsolatedBenchmark.Result pair=IsolatedBenchmark.run(input,repeats,job::log);
                     comparison=pair.json();job.isolatedComparisonCsv=pair.csv();
+                    job.completedSteps++;
 
                 }
                 job.phase="REPORTING";job.log("Đang tổng hợp và lưu hồ sơ thực nghiệm.");
@@ -110,6 +115,7 @@ public final class AnalysisService implements AutoCloseable {
                 try{store.save(job);job.storageState="SAVED";job.log("Đã lưu hồ sơ và ZIP trên máy.");}catch(java.io.IOException e){job.storageState="FAILED";job.storageError=e.getMessage();job.log("Lưu hồ sơ thất bại: "+e.getMessage()+". Hãy tải ZIP trước khi đóng phiên.");}
                 job.log("Hoàn tất. Sẵn sàng xem báo cáo và xuất TXT/CSV.");
                 job.finishedNanos = System.nanoTime();
+                job.completedSteps = job.totalSteps;
                 job.phase = "COMPLETED";
                 terminalState = "COMPLETED";
             } catch(CancellationException e){
@@ -158,6 +164,7 @@ public final class AnalysisService implements AutoCloseable {
         private volatile double importMs = -1, algorithmMs = -1;
         private double heapPeakMb;
         private long rowsRead;
+        private volatile int totalSteps, completedSteps;
         public volatile AnalysisReport report;
         public volatile ComparisonReport comparison;
         public volatile String measurementCsv,isolatedComparisonCsv;
@@ -173,7 +180,7 @@ public final class AnalysisService implements AutoCloseable {
         private final ArrayDeque<String> lines = new ArrayDeque<>();
         Job(String id, String source) { this.id=id; this.source=source; }
         private void fail(Throwable cause){AppError info=AppError.from(cause);error=info.message();errorCode=info.code();errorAction=info.action();}
-        synchronized void log(String line) { checkCancelled(); if (lines.size() >= 500) lines.removeFirst(); lines.addLast(String.format(java.util.Locale.ROOT,"[+%.2f s] %s",(System.nanoTime()-startedNanos)/1e9,line));
+        synchronized void log(String line) { checkCancelled(); if (line.startsWith("TIGHT: xong ")) completedSteps++; if (lines.size() >= 500) lines.removeFirst(); lines.addLast(String.format(java.util.Locale.ROOT,"[+%.2f s] %s",(System.nanoTime()-startedNanos)/1e9,line));
             var matcher=java.util.regex.Pattern.compile("đã đọc ([0-9]+) giao dịch").matcher(line.toLowerCase(java.util.Locale.ROOT));if(matcher.find())rowsRead=Math.max(rowsRead,Long.parseLong(matcher.group(1)));
         }
         public synchronized List<String> logLines(){return List.copyOf(lines);}
@@ -198,6 +205,10 @@ public final class AnalysisService implements AutoCloseable {
             status.put("algorithmMs",miningMs);
             status.put("storageState",storageState);status.put("storageError",storageError);
             status.put("rowsRead",rowsRead);
+            boolean complete=state.equals("COMPLETED");
+            status.put("progressPercent",totalSteps==0?null:complete?100:Math.min(99,100*completedSteps/totalSteps));
+            status.put("completedSteps",completedSteps);status.put("totalSteps",totalSteps);
+            status.put("progressBasis","Mốc đã hoàn tất: đọc/hash, từng batch của mỗi lượt (kể cả warm-up), oracle, đối chiếu nếu bật, lưu báo cáo. Không phải % thời gian hay % số mẫu.");
             status.put("heapUsedMb",heap); status.put("heapPeakObservedMb",heapPeakMb);
             return Json.encode(status);
         }
