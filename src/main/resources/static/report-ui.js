@@ -6,12 +6,10 @@ export function auEvidence(patterns, batch, report) {
       label: 'Ngưỡng phân loại',
       text: `${batch.name}: TU(DB) = ${num(batch.totalTransactionUtility)}; Sᵤ = ${num(report.upperThreshold, 17)}. Ngưỡng HAUP = ${num(report.upperThreshold, 17)} × ${num(batch.totalTransactionUtility)} = ${num(batch.minUtilUpper)} đơn vị tiện ích.`,
     },
-    ...patterns
-      .slice(0, 3)
-      .map((p) => ({
-        label: `Mẫu ${p.name}`,
-        text: `Tổng tiện ích U(P) = ${num(p.sumUtility, 6)}; số item |P| = ${p.length}. AU(P) = ${num(p.sumUtility, 6)} / ${p.length} = ${num(p.averageUtility, 6)}. ${p.averageUtility >= batch.minUtilUpper ? `${num(p.averageUtility, 6)} ≥ ${num(batch.minUtilUpper)} ⇒ HAUP (LARGE).` : p.averageUtility >= batch.minUtilLower ? `${num(batch.minUtilLower)} ≤ ${num(p.averageUtility, 6)} < ${num(batch.minUtilUpper)} ⇒ PRE-LARGE, chưa đạt HAUP.` : `${num(p.averageUtility, 6)} < ${num(batch.minUtilLower)} ⇒ SMALL.`}`,
-      })),
+    ...patterns.slice(0, 3).map((p) => ({
+      label: `Mẫu ${p.name}`,
+      text: `Tổng tiện ích U(P) = ${num(p.sumUtility, 6)}; số item |P| = ${p.length}. AU(P) = ${num(p.sumUtility, 6)} / ${p.length} = ${num(p.averageUtility, 6)}. ${p.averageUtility >= batch.minUtilUpper ? `${num(p.averageUtility, 6)} ≥ ${num(batch.minUtilUpper)} ⇒ HAUP (LARGE).` : p.averageUtility >= batch.minUtilLower ? `${num(batch.minUtilLower)} ≤ ${num(p.averageUtility, 6)} < ${num(batch.minUtilUpper)} ⇒ PRE-LARGE, chưa đạt HAUP.` : `${num(p.averageUtility, 6)} < ${num(batch.minUtilLower)} ⇒ SMALL.`}`,
+    })),
     {
       label: 'Phạm vi',
       text: `Minh họa ${Math.min(patterns.length, 3)}/${patterns.length} mẫu trên biểu đồ. AU chia cho số item của mẫu, không chia cho số giao dịch.`,
