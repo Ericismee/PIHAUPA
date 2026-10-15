@@ -8,6 +8,14 @@ import java.lang.management.ManagementFactory;
 public final class PipelineBenchmark {
     public static void main(String[] args) throws Exception {
         Path path=Path.of(args[0]); double su=Double.parseDouble(args[1]),sl=Double.parseDouble(args[2]);
+        if(args.length>3 && args[3].equals("retained")) {
+            ArchiveDatasetReader.readTransactionsText(new java.io.StringReader("1:2:2\n"),"warm-up",su,sl,line->{});
+            System.gc();Thread.sleep(150);long before=Runtime.getRuntime().totalMemory()-Runtime.getRuntime().freeMemory();
+            InputData input;try(var reader=Files.newBufferedReader(path)){input=ArchiveDatasetReader.readTransactionsText(reader,"retained",su,sl,line->{});}
+            System.gc();Thread.sleep(150);long after=Runtime.getRuntime().totalMemory()-Runtime.getRuntime().freeMemory();
+            System.out.println("inputRetainedBytes="+(after-before));
+            java.lang.ref.Reference.reachabilityFence(input);return;
+        }
         var bean=(com.sun.management.ThreadMXBean)ManagementFactory.getThreadMXBean();
         bean.setThreadAllocatedMemoryEnabled(true); long tid=Thread.currentThread().getId();
         List<Double> read=new ArrayList<>(),mine=new ArrayList<>(); List<Long> allocated=new ArrayList<>();

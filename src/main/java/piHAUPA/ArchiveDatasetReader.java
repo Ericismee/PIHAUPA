@@ -208,6 +208,7 @@ public final class ArchiveDatasetReader {
         String line;
         // Pool theo từng lần đọc, không intern toàn cục: dùng chung String item giữa các giao dịch.
         Map<String, String> itemPool = new HashMap<>();
+        Transaction.ItemDictionary dictionary = new Transaction.ItemDictionary();
         Set<String> rowItems = new HashSet<>();
         while ((line = reader.readLine()) != null) {
             if(Thread.currentThread().isInterrupted())throw new java.util.concurrent.CancellationException("Đã hủy đọc dữ liệu.");
@@ -223,7 +224,8 @@ public final class ArchiveDatasetReader {
             if (declaredTU <= 0) throw badRow(audit.name, row, "TU phải dương");
             double calculatedTU = 0;
             double maximum = 0;
-            Map<String, Double> values = transactions == null ? null : new LinkedHashMap<>();
+            int[] codes = transactions == null ? null : new int[items.length];
+            double[] values = transactions == null ? null : new double[items.length];
             rowItems.clear();
             for (int i = 0; i < items.length; i++) {
                 String item = itemPool.computeIfAbsent(items[i], key -> key);
@@ -234,7 +236,7 @@ public final class ArchiveDatasetReader {
                 calculatedTU += utility;
                 maximum = Math.max(maximum, utility);
                 audit.seenItems.add(item);
-                if (values != null) values.put(item, utility);
+                if (values != null) { codes[i]=dictionary.code(item);values[i]=utility; }
             }
             if (Math.abs(declaredTU - calculatedTU) > Math.max(0.01, declaredTU * 1e-9))
                 audit.tuMismatches++;
@@ -242,7 +244,7 @@ public final class ArchiveDatasetReader {
             audit.totalMU += maximum;
             for (String item : rowItems) audit.upperBounds.merge(item, maximum, Double::sum);
             audit.maxLength = Math.max(audit.maxLength, items.length);
-            if (transactions != null) transactions.add(new Transaction("T" + row, values));
+            if (transactions != null) transactions.add(Transaction.compact("T" + row, dictionary, codes, values));
             if (row % 10_000 == 0) progress.accept(audit.name + ": đã đọc " + row + " giao dịch");
         }
         if (audit.rows == 0) throw new IllegalArgumentException(audit.name + " không có giao dịch.");

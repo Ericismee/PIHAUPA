@@ -427,3 +427,12 @@ Giữ nguyên Sᵤ/Sₗ, công thức AU/AUUB/MAU, tập LARGE/PRE-LARGE và đi
 Chữ ký SHA-256 của action, LARGE/PRE-LARGE và AU **ở mọi batch** trùng trước/sau trên hai cấu hình trên. Test oracle vét cạn/ngẫu nhiên, ranh giới, parser và TID không theo thứ tự vẫn đạt. Các mức tăng tốc là số đo máy hiện tại, không cam kết cho mọi bộ dữ liệu/ngưỡng. Không thêm cache input để tránh giữ thêm dữ liệu lớn trong RAM hoặc làm sai phạm vi đo đọc tệp.
 
 Công cụ tái đo: `PipelineBenchmark` trong `src/test/java/piHAUPA/PipelineBenchmark.java`, nhận `transactions.txt Su Sl`; dùng classpath `target/classes;target/test-classes` sau khi biên dịch test. In median đọc/mining, byte cấp phát và chữ ký kết quả để kiểm tra trước/sau.
+
+
+### Lưu giao dịch bằng mã item và mảng nguyên thủy
+
+Parser `transactions.txt` lưu item thành `int[]`, utility thành `double[]`, dùng từ điển tên/mã chung theo từng tệp. Mảng `long[]` chỉ mục cho lookup nhị phân, trong khi thứ tự duyệt item gốc vẫn giữ nguyên. API `internalUtilities()` là Map view bất biến để giữ tương thích export/oracle/UI; miner duyệt primitive trực tiếp, không cần tạo Map.Entry/Double cho các vòng đọc chính. Mẫu nhúng và định dạng định lượng vẫn hỗ trợ Map như trước. Không thay đổi thứ tự cộng TU để tránh đổi kết quả dấu phẩy động.
+
+Đo bổ sung cùng cấu hình benchmark bên trên: NewConnects đọc/mining median 1.144,002/807,574 ms; NewMushroom 66,725/409,943 ms. Chữ ký mọi batch trùng bản trước. Lợi ích chính là giảm heap giữ dữ liệu: với NewConnects, phép đo chẩn đoán sau GC trong JVM riêng giữ InputData sống cho thấy 216.134.144 → 72.930.152 bytes (khoảng 206,1 → 69,6 MiB, giảm 66%). Đây là heap giữ input sau GC, không phải RSS hoặc peak của toàn pipeline; GC này chỉ nằm trong công cụ benchmark, không thêm vào web.
+
+30 luồng dữ liệu nhỏ ngẫu nhiên kiểm tra cả Original/Tight: array và Map có cùng LARGE/PRE-LARGE ở mọi batch, cùng re-scan và khớp oracle vét cạn. Kiểm tra Map view/entry không sửa được. Tái đo heap giữ input bằng tham số thứ tư `retained` của PipelineBenchmark. Chưa bật cache toàn bộ input hoặc song song miner: chúng có thể tăng RAM/overhead và cần thực nghiệm riêng trước khi áp dụng.

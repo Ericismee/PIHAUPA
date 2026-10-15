@@ -78,20 +78,21 @@ public final class PiHaupaMiner {
             checkCancelled();
             double maximum = 0.0;
             if (unitExternalUtilities) {
-                for (double utility : transaction.internalUtilities().values()) {
-                    batchTU += utility;
-                    maximum = Math.max(maximum, utility);
-                }
+                double[] runningTU = {batchTU};
+                transaction.forEachUtility((item, utility) -> runningTU[0] += utility);
+                batchTU = runningTU[0];
+                maximum = transaction.unitMaximumUtility();
             } else {
                 batchTU += transaction.transactionUtility(externalUtilities);
                 maximum = transaction.maximumUtility(externalUtilities);
             }
             batchMU += maximum;
-            for (String item : transaction.internalUtilities().keySet()) {
-                globalAuub.merge(item, maximum, Double::sum);
-                globalItemUtility.merge(item, unitExternalUtilities ? transaction.internalUtilities().get(item)
-                        : transaction.utilityOf(item,externalUtilities), Double::sum);
-            }
+            final double transactionMaximum = maximum;
+            transaction.forEachUtility((item, utility) -> {
+                globalAuub.merge(item, transactionMaximum, Double::sum);
+                globalItemUtility.merge(item, unitExternalUtilities ? utility
+                        : utility*externalUtilities.get(item), Double::sum);
+            });
         }
         totalTransactionUtilityProcessed += batchTU;
         totalMaximumUtilityProcessed += batchMU;
@@ -205,14 +206,15 @@ public final class PiHaupaMiner {
         int transactionIndex = 0;
         for (Transaction transaction : transactions) {
             checkCancelled();
-            for (String item : transaction.internalUtilities().keySet()) {
+            final int position = transactionIndex;
+            transaction.forEachUtility((item,internalUtility) -> {
                 PiNode node = byItem.get(item);
-                if (node == null) continue;
-                double utility = unitExternalUtilities ? transaction.internalUtilities().get(item)
-                        : transaction.utilityOf(item, externalUtilities);
+                if (node == null) return;
+                double utility = unitExternalUtilities ? internalUtility
+                        : internalUtility * externalUtilities.get(item);
                 node.sumUtility += utility;
-                node.entries.add(new PiEntry(transactionIndex, utility, 0.0));
-            }
+                node.entries.add(new PiEntry(position, utility, 0.0));
+            });
             transactionIndex++;
         }
         List<PiNode> nodes = new ArrayList<>(byItem.values());
