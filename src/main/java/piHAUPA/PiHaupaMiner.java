@@ -224,31 +224,35 @@ public final class PiHaupaMiner {
     }
 
     private void restructure(List<PiNode> nodes) {
-        TempRemaining[] temp = new TempRemaining[allTransactions.size()];
+        // Bước trung gian: trạng thái remaining theo vị trí giao dịch, dùng mảng nguyên thủy.
+        // Không tạo một TempRemaining object cho mỗi giao dịch.
+        double[] maximum = new double[allTransactions.size()];
+        int[] count = new int[allTransactions.size()];
         for (int i = nodes.size() - 1; i >= 0; i--) {
             checkCancelled();
             PiNode node = nodes.get(i);
             for (PiEntry entry : node.entries) {
-                TempRemaining remaining = temp[entry.transactionIndex];
-                if (remaining == null) {
-                    temp[entry.transactionIndex] = new TempRemaining(entry.utility, 1);
-                } else {
-                    entry.maximumRemainingUtility = remaining.maximumRemainingUtility;
-                    node.maximumRemainingNumber = Math.max(node.maximumRemainingNumber, remaining.remainingNumber);
-                    remaining.maximumRemainingUtility = Math.max(remaining.maximumRemainingUtility, entry.utility);
-                    remaining.remainingNumber++;
+                int position = entry.transactionIndex;
+                if (count[position] != 0) {
+                    entry.maximumRemainingUtility = maximum[position];
+                    node.maximumRemainingNumber = Math.max(node.maximumRemainingNumber, count[position]);
                 }
+                maximum[position] = Math.max(maximum[position], entry.utility);
+                count[position]++;
             }
         }
     }
 
     private void patternExpansion(List<PiNode> currentList, List<String> prefix) {
         double lower = lowerThreshold * totalTransactionUtility;
+        // PRECOMPUTATION: chuẩn bị thứ tự utility một lần cho cả danh sách anh em.
+        // Chỉ cấp phát khi thật sự cần kiểm tra nhánh mở rộng.
+        ExtensionPlan extensionPlan = null;
         for (int i = 0; i < currentList.size(); i++) {
             checkCancelled();
             PiNode node = currentList.get(i);
-            List<String> pattern = new ArrayList<>(prefix);
-            pattern.add(node.item);
+            prefix.add(node.item);
+            List<String> pattern = prefix;
             patternsVisited++;
             if ((patternsVisited & 1023) == 0 && System.nanoTime()-lastProgressNanos >= 2_000_000_000L) {
                 reportProgress("05 · Đang mở rộng: đã duyệt "+patternsVisited+" mẫu, kết hợp "+combinedNodes+" nút; PT giữ "+patternTree.size()+" mẫu. Chưa hoàn tất.");
@@ -261,7 +265,12 @@ public final class PiHaupaMiner {
             }
 
             double mau = maximumAverageUpperBound(node, pattern.size());
-            if (mau >= lower && extensionCanReachLower(node,pattern.size(),currentList,i+1,lower)) {
+            if (mau >= lower && i + 1 < currentList.size()) {
+                if (extensionPlan == null) extensionPlan = new ExtensionPlan(currentList);
+                if (!extensionPlan.canReach(node, pattern.size(), i + 1, lower)) {
+                    prefix.remove(prefix.size() - 1);
+                    continue;
+                }
                 List<PiNode> conditional = new ArrayList<>();
                 for (int j = i + 1; j < currentList.size(); j++) {
                     PiNode combined = combine(node, currentList.get(j));
@@ -273,6 +282,7 @@ public final class PiHaupaMiner {
                     patternExpansion(conditional, pattern);
                 }
             }
+            prefix.remove(prefix.size() - 1);
         }
     }
 
@@ -282,17 +292,29 @@ public final class PiHaupaMiner {
      * utilities bounds every extension of that length. This avoids expanding
      * huge subtrees whose AU cannot reach Sl*TU(DB), without changing re-scan.
      */
-    private boolean extensionCanReachLower(PiNode node,int length,List<PiNode> candidates,int first,double lower) {
-        double[] utilities=new double[candidates.size()-first];
-        for(int j=first;j<candidates.size();j++)utilities[j-first]=globalItemUtility.get(candidates.get(j).item);
-        java.util.Arrays.sort(utilities);
-        double upperUtility=node.sumUtility;
-        int added=0;
-        for(int j=utilities.length-1;j>=0;j--) {
-            upperUtility+=utilities[j]; added++;
-            if(upperUtility/(length+added)>=lower-Math.max(1,lower)*1e-12)return true;
+    private final class ExtensionPlan {
+        private final int[] descendingPositions;
+        private final double[] utilities;
+        private ExtensionPlan(List<PiNode> candidates) {
+            Integer[] order = new Integer[candidates.size()];
+            utilities = new double[order.length];
+            for (int i=0;i<order.length;i++) {
+                order[i]=i;
+                utilities[i]=globalItemUtility.get(candidates.get(i).item);
+            }
+            java.util.Arrays.sort(order, (a,b)->Double.compare(utilities[b],utilities[a]));
+            descendingPositions = new int[order.length];
+            for(int i=0;i<order.length;i++)descendingPositions[i]=order[i];
         }
-        return false;
+        private boolean canReach(PiNode node,int length,int first,double lower) {
+            double upperUtility=node.sumUtility;
+            int added=0;
+            for(int position:descendingPositions)if(position>=first){
+                upperUtility+=utilities[position]; added++;
+                if(upperUtility/(length+added)>=lower-Math.max(1,lower)*1e-12)return true;
+            }
+            return false;
+        }
     }
 
     private PiNode combine(PiNode left, PiNode right) {
@@ -300,6 +322,10 @@ public final class PiHaupaMiner {
         PiNode combined = new PiNode(right.item);
         combined.auub = Math.min(left.auub, right.auub);
         combined.maximumRemainingNumber = Math.min(left.maximumRemainingNumber, right.maximumRemainingNumber);
+        // Cắt ghép rỗng bằng khoảng vị trí: không có giao dịch chung thì không có mẫu ghép.
+        if (left.entries.isEmpty() || right.entries.isEmpty()
+                || left.entries.get(left.entries.size()-1).transactionIndex < right.entries.get(0).transactionIndex
+                || right.entries.get(right.entries.size()-1).transactionIndex < left.entries.get(0).transactionIndex) return combined;
         // Các list giữ cùng thứ tự giao dịch gốc. Merge hai con trỏ thay HashMap mới mỗi phép ghép.
         // Chỉ số là vị trí trong allTransactions, không giả định TID là số hoặc đã sắp xếp.
         int leftIndex = 0;
@@ -469,16 +495,6 @@ public final class PiHaupaMiner {
             this.transactionIndex = transactionIndex;
             this.utility = utility;
             this.prefixUtility = prefixUtility;
-        }
-    }
-
-    private static final class TempRemaining {
-        private double maximumRemainingUtility;
-        private int remainingNumber;
-
-        private TempRemaining(double maximumRemainingUtility, int remainingNumber) {
-            this.maximumRemainingUtility = maximumRemainingUtility;
-            this.remainingNumber = remainingNumber;
         }
     }
 

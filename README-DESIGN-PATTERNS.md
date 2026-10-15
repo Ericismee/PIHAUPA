@@ -303,3 +303,28 @@ Frontend tách thành `api.js`, `ui-components.js`, `report-ui.js`, `notificatio
 `AnalysisService` bổ sung hủy hợp tác, đo lặp và `RunStore` lưu hồ sơ trên máy. `ExperimentProfile` ghi SHA-256 và môi trường. `SmallDataOracle` kiểm tra độc lập dữ liệu nhỏ. `IsolatedBenchmark` chạy mỗi chính sách trong JVM con riêng, tuần tự. Các lớp này hỗ trợ tái lập phép đo và tính đúng; không làm thay đổi công thức PIHAUPA hoặc tự chứng minh tăng tốc.
 
 Kết quả chính dùng median một số lẻ lượt (1/3/5); 3/5 có warm-up. So sánh heap đã tách JVM theo chính sách nhưng vẫn dùng heap quan sát, không phải RSS. Hồ sơ hoàn tất lưu ở `results/runs`, có thể mở lại khi cache/job ID đã hết hạn. Hủy trước công bố không lưu kết quả dở dang.
+
+
+## Tối ưu lõi khai phá: bước chuẩn bị trung gian
+
+Đây là **kỹ thuật tối ưu triển khai**, không bổ sung tên GoF vào số lượng design pattern. Strategy/Facade giúp thay nguồn và điều phối; tốc độ ở đây đến từ giảm cấp phát và tránh sắp xếp lặp.
+
+1. **Chuẩn bị thứ tự utility dùng chung:** `ExtensionPlan` sắp xếp utility singleton một lần cho một danh sách anh em. Khi xét một nhánh, chỉ lấy các vị trí ở phía sau. Trước đây mỗi nhánh tạo mảng và sort riêng. Chi phí chuẩn bị từ nhiều lần sort suffix giảm thành một lần O(n log n), sau đó mỗi lần kiểm tra O(n). Đây là cận tối ưu bổ sung của implementation, không đổi công thức MAU của bài báo.
+2. **Mảng trạng thái MRU/MRN:** `restructure` dùng `double[]`/`int[]` theo chỉ số giao dịch, thay đối tượng `TempRemaining` riêng từng giao dịch. Giảm số object và áp lực GC; vẫn O(số phần tử PIHAUP-List), vẫn cần bộ nhớ O(số giao dịch).
+3. **Duyệt cây với đường đi dùng lại:** `patternExpansion` thêm item trước khi đệ quy, bỏ item khi quay lui. Chỉ mẫu được lưu mới có bản sao bất biến. Tránh sao chép prefix cho mọi mẫu đã duyệt.
+4. **Bỏ phép ghép chắc chắn rỗng:** `combine` kiểm tra khoảng chỉ số giao dịch trước merge. Nếu hai khoảng không giao nhau, trả list rỗng ngay. Nếu giao nhau vẫn merge chính xác; không dùng khoảng thay phép kiểm tra support.
+
+Code: [chuẩn bị và mở rộng](src/main/java/piHAUPA/PiHaupaMiner.java), [benchmark tái chạy](scripts/OptimizationBench.java).
+
+### Bằng chứng đo ngày 15/10/2026
+
+JDK 25, heap tối đa 2 GiB; mỗi phiên JVM riêng, 2 warm-up và 5 lượt đo, lấy median. Không tính đọc dữ liệu trong runtime. Thứ tự baseline trước, optimized sau; có nhiễu JIT/OS, không phải benchmark của tác giả.
+
+- Tổng hợp seed 71352, 3.000 giao dịch/16 item, Su=3%, Sl=1,5%: 179,53 → 162,26 ms (giảm 9,6%).
+- Cùng dữ liệu, Su=4%, Sl=2,5%: 142,64 → 129,02 ms (giảm 9,5%).
+- NewChess, Su=4,1%, Sl=3,5%: 289,87 → 273,82 ms (giảm 5,5%).
+- SHA-256 của toàn bộ mẫu, utility và phân loại theo từng batch khớp baseline trong cả ba trường hợp. Số mẫu duyệt/phép ghép giữ nguyên. Bộ kiểm thử Java gồm ví dụ bài báo và đối chiếu oracle ngẫu nhiên đã qua.
+
+Chạy benchmark sau build: `javac -encoding UTF-8 -cp target/classes -d target/bench scripts/OptimizationBench.java`, rồi `java -Xmx2g -cp "target/classes;target/bench" OptimizationBench .04 .025`. Tham số thứ ba tùy chọn là đường dẫn transactions.txt. Để so trước/sau, chạy cùng harness trên classpath của từng revision trong JVM riêng.
+
+Không tự tăng ngưỡng, cắt số kết quả, lấy mẫu dữ liệu hoặc thay điều kiện re-scan để làm runtime trông tốt hơn. Song song hóa, cache kết quả và thay cấu trúc list cần phép đo riêng: chúng có thể tăng RAM, trả kết quả cũ hoặc thay đổi thứ tự cộng số thực. Không áp dụng chỉ vì mang tên một pattern.
