@@ -1,82 +1,84 @@
 export const colors = {
-    blue: '#2563eb',
-    green: '#168364',
-    amber: '#c78b25',
-    slate: '#7990ac',
-    cyan: '#0891b2',
+  blue: '#2563eb',
+  green: '#168364',
+  amber: '#c78b25',
+  slate: '#7990ac',
+  cyan: '#0891b2',
 };
 
-export const esc = value =>
-    String(value ?? '').replace(
-        /[&<>"']/g,
-        c =>
-        ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#39;',
-        })[c],
-    );
+export const esc = (value) =>
+  String(value ?? '').replace(
+    /[&<>"']/g,
+    (c) =>
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[c],
+  );
 
 export const num = (value, digits = 2) =>
-    value == null ?
-    'Không có số đo' :
-    new Intl.NumberFormat('vi-VN', {
+  value == null
+    ? 'Không có số đo'
+    : new Intl.NumberFormat('vi-VN', {
         maximumFractionDigits: digits,
-    }).format(value);
+      }).format(value);
 
 /** SVG charts use the real report, zero baseline, native tooltips, and a data alternative. */
 export function chart(
-    labels,
-    series, {
-        kind = 'bar',
-        unit = '',
-        height = 220,
-        emptyMessage = 'Chưa có dữ liệu để vẽ biểu đồ.',
-        expanded = false,
-        xLabel = '',
-        yLabel = '',
-        explanation = '',
-        evidenceRows = [],
-    } = {},
+  labels,
+  series,
+  {
+    kind = 'bar',
+    unit = '',
+    height = 220,
+    emptyMessage = 'Chưa có dữ liệu để vẽ biểu đồ.',
+    expanded = false,
+    xLabel = '',
+    yLabel = '',
+    explanation = '',
+    evidenceRows = [],
+  } = {},
 ) {
-    if (!labels.length || !series.length) {
-        return `<div class="bar-empty">${esc(emptyMessage)}</div>`;
-    }
+  if (!labels.length || !series.length) {
+    return `<div class="bar-empty">${esc(emptyMessage)}</div>`;
+  }
 
-    xLabel =
-        xLabel ||
-        (labels.every(l => /^DB|^DB0/.test(l)) ?
-            'Batch dữ liệu' :
-            labels.every(l => /^TC-/.test(l)) ?
-            'Test case' :
-            labels.every(l => /^Lượt /.test(l)) ?
-            'Lượt chạy' :
-            labels.every(l => / · [0-9]+$/.test(l)) ?
-            'Nhóm test case' :
-            labels.some(l => /Original|Tight/.test(l)) ?
-            'Chính sách re-scan' :
-            series.some(s => /AUUB/.test(s.name)) ?
-            'Item' :
-            series.some(s => /AU\(P\)/.test(s.name)) ?
-            'Mẫu P' :
-            'Hạng mục');
+  xLabel =
+    xLabel ||
+    (labels.every((l) => /^DB|^DB0/.test(l))
+      ? 'Batch dữ liệu'
+      : labels.every((l) => /^TC-/.test(l))
+        ? 'Test case'
+        : labels.every((l) => /^Lượt /.test(l))
+          ? 'Lượt chạy'
+          : labels.every((l) => / · [0-9]+$/.test(l))
+            ? 'Nhóm test case'
+            : labels.some((l) => /Original|Tight/.test(l))
+              ? 'Chính sách re-scan'
+              : series.some((s) => /AUUB/.test(s.name))
+                ? 'Item'
+                : series.some((s) => /AU\(P\)/.test(s.name))
+                  ? 'Mẫu P'
+                  : 'Hạng mục');
 
-    yLabel =
-        yLabel || {
-            utility: 'Tiện ích',
-            ms: 'Thời gian',
-            MiB: 'JVM heap',
-            case: 'Số test case',
-            mẫu: 'Số mẫu',
-            lần: 'Số lần',
-            'giao dịch': 'Số giao dịch',
-            'lượt / nút': 'Số lượng',
-        }[unit] ||
-        'Giá trị';
+  yLabel =
+    yLabel ||
+    {
+      utility: 'Tiện ích',
+      ms: 'Thời gian',
+      MiB: 'JVM heap',
+      case: 'Số test case',
+      mẫu: 'Số mẫu',
+      lần: 'Số lần',
+      'giao dịch': 'Số giao dịch',
+      'lượt / nút': 'Số lượng',
+    }[unit] ||
+    'Giá trị';
 
-    const axes = `
+  const axes = `
     <p class="chart-axes">
       <span><strong>X:</strong> ${esc(xLabel)}</span>
       <span>
@@ -85,38 +87,38 @@ export function chart(
     </p>
   `;
 
-    const width = expanded ? Math.max(900, labels.length * 85) : 600;
-    const left = 65;
-    const right = 18;
-    const top = 22;
-    const bottom = 42;
-    const plotW = width - left - right;
-    const plotH = height - top - bottom;
+  const width = expanded ? Math.max(900, labels.length * 85) : 600;
+  const left = 65;
+  const right = 18;
+  const top = 22;
+  const bottom = 42;
+  const plotW = width - left - right;
+  const plotH = height - top - bottom;
 
-    const values = series.flatMap(s => s.values).filter(Number.isFinite);
-    const max = Math.max(...values, 0) * 1.15 || 1;
-    const min = Math.min(...values, 0) * 1.15;
-    const y = v => top + plotH - ((v - min) / (max - min)) * plotH;
-    const groupW = plotW / labels.length;
+  const values = series.flatMap((s) => s.values).filter(Number.isFinite);
+  const max = Math.max(...values, 0) * 1.15 || 1;
+  const min = Math.min(...values, 0) * 1.15;
+  const y = (v) => top + plotH - ((v - min) / (max - min)) * plotH;
+  const groupW = plotW / labels.length;
 
-    let svg = `
+  let svg = `
     <svg
       class="chart"
       viewBox="0 0 ${width} ${height}"
       role="img"
-      aria-label="${esc(series.map(s => s.name).join(', '))} theo ${esc(
+      aria-label="${esc(series.map((s) => s.name).join(', '))} theo ${esc(
         labels.join(', '),
       )}. Đơn vị ${esc(unit)}. Có bảng số liệu bên dưới."
     >
       <title>
-        ${esc(series.map(s => s.name).join(' / '))} (${esc(unit)})
+        ${esc(series.map((s) => s.name).join(' / '))} (${esc(unit)})
       </title>
   `;
 
-    for (let i = 0; i <= 4; i++) {
-        const v = min + ((max - min) * i) / 4;
+  for (let i = 0; i <= 4; i++) {
+    const v = min + ((max - min) * i) / 4;
 
-        svg += `
+    svg += `
       <line
         class="axis"
         x1="${left}"
@@ -130,16 +132,14 @@ export function chart(
         text-anchor="end"
       >${esc(compact(v))}</text>
     `;
-    }
+  }
 
-    const labelStep = expanded ?
-        1 :
-        Math.max(1, Math.ceil(labels.length / 7));
+  const labelStep = expanded ? 1 : Math.max(1, Math.ceil(labels.length / 7));
 
-    labels.forEach((label, i) => {
-        if (i % labelStep !== 0 && i !== labels.length - 1) return;
+  labels.forEach((label, i) => {
+    if (i % labelStep !== 0 && i !== labels.length - 1) return;
 
-        svg += `
+    svg += `
       <text
         x="${left + groupW * (i + 0.5)}"
         y="${height - 13}"
@@ -149,17 +149,15 @@ export function chart(
         <title>${esc(label)}</title>
       </text>
     `;
-    });
+  });
 
-    series.forEach((s, j) => {
-        const color = s.color || Object.values(colors)[j % 5];
+  series.forEach((s, j) => {
+    const color = s.color || Object.values(colors)[j % 5];
 
-        if (kind === 'line') {
-            let points = s.values
-                .map((v, i) => `${left + groupW * (i + 0.5)},${y(v)}`)
-                .join(' ');
+    if (kind === 'line') {
+      let points = s.values.map((v, i) => `${left + groupW * (i + 0.5)},${y(v)}`).join(' ');
 
-            svg += `
+      svg += `
         <polyline
           points="${points}"
           fill="none"
@@ -168,8 +166,8 @@ export function chart(
         />
       `;
 
-            s.values.forEach((v, i) => {
-                svg += `
+      s.values.forEach((v, i) => {
+        svg += `
           <circle
             cx="${left + groupW * (i + 0.5)}"
             cy="${y(v)}"
@@ -183,16 +181,13 @@ export function chart(
             </title>
           </circle>
         `;
-            });
-        } else {
-            s.values.forEach((v, i) => {
-                const barW = Math.min(46, (groupW * 0.65) / series.length);
-                const x =
-                    left +
-                    groupW * (i + 0.5) +
-                    (j - series.length / 2) * barW;
+      });
+    } else {
+      s.values.forEach((v, i) => {
+        const barW = Math.min(46, (groupW * 0.65) / series.length);
+        const x = left + groupW * (i + 0.5) + (j - series.length / 2) * barW;
 
-                svg += `
+        svg += `
           <rect
             x="${x + 2}"
             y="${Math.min(y(v), y(0))}"
@@ -206,13 +201,13 @@ export function chart(
             </title>
           </rect>
         `;
-            });
-        }
-    });
+      });
+    }
+  });
 
-    svg += '</svg>';
+  svg += '</svg>';
 
-    svg += `
+  svg += `
     <div class="legend">
       ${series
         .map(
@@ -233,14 +228,14 @@ export function chart(
       <div class="table-wrap">
         <table class="data-table">
           <caption>
-            Bảng số liệu · ${esc(series.map(s => s.name).join(' / '))}
+            Bảng số liệu · ${esc(series.map((s) => s.name).join(' / '))}
           </caption>
           <thead>
             <tr>
               <th scope="col" class="column-text">${esc(xLabel)}</th>
               ${series
                 .map(
-                  s => `
+                  (s) => `
                     <th scope="col" class="column-number">
                       ${esc(s.name)} (${esc(unit)})
                     </th>
@@ -257,7 +252,7 @@ export function chart(
                     <td>${esc(l)}</td>
                     ${series
                       .map(
-                        s => `
+                        (s) => `
                           <td class="numeric column-number">
                             ${num(s.values[i], 6)}
                           </td>
@@ -274,7 +269,7 @@ export function chart(
     </details>
   `;
 
-  const names = series.map(s => s.name).join(' / ');
+  const names = series.map((s) => s.name).join(' / ');
 
   explanation =
     explanation ||
@@ -282,7 +277,7 @@ export function chart(
       ? 'Eq. (12): MU(ID) − Sᵤ×TU(ID) ≥ (Sᵤ−Sₗ)×TU(OD) ⇒ re-scan.'
       : names.includes('AUUB')
         ? 'AUUB(P) < Sᵤ×TU(DB) ⇒ loại trừ HAUP; AUUB là cận trên.'
-        : (names.includes('AU(P)') || yLabel === 'AU(P)')
+        : names.includes('AU(P)') || yLabel === 'AU(P)'
           ? 'AU(P) là tiện ích trung bình của mẫu P: lấy tổng tiện ích U(P) chia cho số item |P|. Mẫu là HAUP (LARGE) khi AU(P) đạt ngưỡng Sᵤ × TU(DB).'
           : unit === 'ms'
             ? 'Thời gian thực đo (ms). CPU và wall time là hai số đo riêng.'
@@ -314,7 +309,7 @@ export function chart(
             <details class="chart-workings" ${expanded ? 'open' : ''}><summary>Phép tính & số liệu</summary><ol class="evidence-steps">
               ${evidenceRows
                 .map(
-                  row => `
+                  (row) => `
                     <li>
                       <strong>${esc(row.label)}</strong>
                       <span>${esc(row.text)}</span>
@@ -328,10 +323,7 @@ export function chart(
             <p class="chart-latest">
               <strong>Mốc ${esc(labels[i])}:</strong>
               ${series
-                .map(
-                  s =>
-                    `${esc(s.name)} = ${num(s.values[i], 6)} ${esc(unit)}`,
-                )
+                .map((s) => `${esc(s.name)} = ${num(s.values[i], 6)} ${esc(unit)}`)
                 .join(' · ')}
             </p>
           `
@@ -367,9 +359,7 @@ export function chart(
                 type="button"
                 class="button chart-expand"
                 data-chart="${payload}"
-                aria-label="Phóng to biểu đồ ${esc(
-                  series.map(s => s.name).join(' / '),
-                )}"
+                aria-label="Phóng to biểu đồ ${esc(series.map((s) => s.name).join(' / '))}"
               >⤢ Phóng to</button>
             </div>
           `
@@ -395,7 +385,7 @@ function compact(value) {
 }
 
 // One delegated handler supports charts added by every page and subsequent runs.
-document.addEventListener('click', event => {
+document.addEventListener('click', (event) => {
   const button = event.target.closest('.chart-expand');
   if (!button) return;
 
@@ -409,7 +399,7 @@ document.addEventListener('click', event => {
 
     document.body.append(dialog);
 
-    dialog.addEventListener('click', e => {
+    dialog.addEventListener('click', (e) => {
       if (e.target === dialog) dialog.close();
     });
 
@@ -418,9 +408,7 @@ document.addEventListener('click', event => {
     });
   }
 
-  const title =
-    button.closest('.card')?.querySelector('h2')?.textContent ||
-    'Biểu đồ chi tiết';
+  const title = button.closest('.card')?.querySelector('h2')?.textContent || 'Biểu đồ chi tiết';
 
   dialog.innerHTML = `
     <div class="chart-dialog-head">
