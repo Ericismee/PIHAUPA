@@ -238,7 +238,10 @@
           <summary>Nhật ký quy trình chạy</summary>
           <div class="run-progress-header">
             <strong id="run-progress-label">Đang chuẩn bị…</strong
-            ><span id="run-progress-count"></span>
+            ><span id="run-progress-count"></span
+            ><button type="button" id="cancel-active-job" class="button" hidden>
+              Hủy lượt đang chạy
+            </button>
           </div>
           <progress id="run-progress-bar" max="100" aria-label="Tiến độ các mốc xử lý"></progress>
           <p class="subtle" id="run-progress-note">

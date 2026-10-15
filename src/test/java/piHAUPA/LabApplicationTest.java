@@ -28,8 +28,11 @@ public final class LabApplicationTest {
             var started=new java.util.concurrent.CountDownLatch(1);var cleaned=new java.util.concurrent.atomic.AtomicBoolean();
             InputSource slow=new InputSource(){public String name(){return "cancellation-test";}public InputData read(double su,double sl,java.util.function.Consumer<String> log){started.countDown();try{Thread.sleep(30000);}catch(InterruptedException e){Thread.currentThread().interrupt();throw new java.util.concurrent.CancellationException();}return oracleInput;}public void cleanup(){cleaned.set(true);}};
             var job=cancellation.submit(slow,.23,.1,false);if(!started.await(2,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("Worker not started");
+            if(!cancellation.activeStatus().contains(job.id)||!cancellation.activeStatus().contains("\"active\":true"))throw new AssertionError("Active job must be discoverable after reload");
+            try{cancellation.submit(InputSource.paper(),.23,.1,false);throw new AssertionError("Concurrent job accepted");}catch(IllegalStateException expected){}
             cancellation.cancel(job.id);long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(3);while(job.state.equals("RUNNING")&&System.nanoTime()<deadline)Thread.sleep(10);
             if(!job.state.equals("CANCELLED")||job.result!=null||!cleaned.get())throw new AssertionError("Cancelled job must cleanup without publishing partial result: "+job.status());
+            if(!cancellation.activeStatus().contains("\"active\":false"))throw new AssertionError("BUSY remained after cancellation cleanup");
             var next=cancellation.submit(InputSource.paper(),.23,.1,false,3);deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(10);while(next.state.equals("RUNNING")&&System.nanoTime()<deadline)Thread.sleep(10);
             if(!next.state.equals("COMPLETED")||next.timingSamples.size()!=3||!next.result.contains("\"medianMs\""))throw new AssertionError("Repeated measurement after cancel");
             if(!cancellation.store().result(next.id).equals(next.result)||cancellation.store().archive(next.id).length==0)throw new AssertionError("Persisted experiment");

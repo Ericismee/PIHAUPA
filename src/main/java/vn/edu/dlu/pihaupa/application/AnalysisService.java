@@ -34,8 +34,9 @@ public final class AnalysisService implements AutoCloseable {
         worker.submit(() -> {
             job.executionThread=Thread.currentThread();
             String terminalState = "FAILED";
-            ResourceMonitor resources = new ResourceMonitor();
+            ResourceMonitor resources = null;
             try {
+                resources = new ResourceMonitor();
                 long start = System.nanoTime();
                 job.phase = "READING";
                 job.log("Đang đọc và kiểm tra dữ liệu đầu vào…");
@@ -130,7 +131,7 @@ public final class AnalysisService implements AutoCloseable {
                 job.finishedNanos = System.nanoTime();
                 if(!terminalState.equals("CANCELLED"))job.phase = "FAILED";
             } finally {
-                resources.close();
+                if(resources!=null)resources.close();
                 try { source.cleanup(); } catch (Exception e) { synchronized(job){job.lines.addLast("Không dọn được tệp tạm: "+e.getMessage());} }
                 synchronized (AnalysisService.this) {if(job.cancelRequested && !terminalState.equals("FAILED")){terminalState="CANCELLED";job.result=null;job.phase="CANCELLED";}job.executionThread=null;active = false; job.state = terminalState;}
                 Thread.interrupted();
@@ -138,6 +139,12 @@ public final class AnalysisService implements AutoCloseable {
         });
         return job;
     }
+    /** Khôi phục theo dõi sau refresh/mất kết nối; không xóa khóa của worker đang chạy. */
+    public synchronized String activeStatus() {
+        Job running=jobs.values().stream().filter(job->job.state.equals("RUNNING")).findFirst().orElse(null);
+        return "{\"active\":"+active+",\"job\":"+(running==null?"null":running.status())+"}";
+    }
+
     public synchronized Job get(String id) {
         Job job = jobs.get(id);
         if (job == null) throw new NoSuchElementException("Phiên đã hết hạn hoặc không tồn tại. Chạy lại để xuất báo cáo.");

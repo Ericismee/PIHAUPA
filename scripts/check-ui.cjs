@@ -181,3 +181,79 @@ ctx.progress = { state: 'COMPLETED', progressPercent: 100, completedSteps: 5, to
 vm.runInContext('updateRunProgress(progress)', ctx);
 if (!el('run-progress-label').textContent.includes('100%')) throw Error('Completed progress');
 console.log('PASS determinate and completed progress states');
+
+(async () => {
+  if (!fs.existsSync('tmp/experiment-result.json')) throw Error('Recovery fixture missing');
+  const result = JSON.parse(fs.readFileSync('tmp/experiment-result.json', 'utf8'));
+  const running = {
+    id: result.id,
+    source: result.source,
+    state: 'RUNNING',
+    phase: 'MINING',
+    lines: ['Đang khai phá'],
+    canCancel: true,
+    progressPercent: 20,
+    totalSteps: 6,
+    completedSteps: 1,
+  };
+  const completed = {
+    ...running,
+    state: 'COMPLETED',
+    phase: 'COMPLETED',
+    canCancel: false,
+    progressPercent: 100,
+    completedSteps: 6,
+  };
+  ctx.setTimeout = (fn, delay) => setTimeout(fn, Math.min(delay, 10));
+  let posts = 0;
+  ctx.request = async (url, options = {}) => {
+    if (options.method === 'POST') posts++;
+    if (url === '/api/jobs/active') return { active: true, job: running };
+    if (url.endsWith('/result')) return result;
+    return completed;
+  };
+  vm.runInContext('state.busy=false;', ctx);
+  if (!(await vm.runInContext('recoverActiveJob()', ctx))) throw Error('Active job not resumed');
+  if (posts !== 0 || vm.runInContext('state.busy', ctx))
+    throw Error('Recovery submitted duplicate or left UI busy');
+  let removed = false;
+  ctx.localStorage = {
+    getItem: () => 'expired',
+    setItem() {},
+    removeItem() {
+      removed = true;
+    },
+  };
+  ctx.request = async (url) => {
+    if (url === '/api/jobs/active') return { active: false, job: null };
+    throw Object.assign(new Error('expired'), { code: 'JOB_EXPIRED', status: 404 });
+  };
+  if ((await vm.runInContext('recoverActiveJob(true)', ctx)) || !removed)
+    throw Error('Expired job recovery');
+  let activeChecks = 0;
+  posts = 0;
+  ctx.request = async (url, options = {}) => {
+    if (options.method === 'POST') {
+      posts++;
+      throw Object.assign(new Error('busy'), { code: 'BUSY', status: 409 });
+    }
+    if (url === '/api/jobs/active')
+      return ++activeChecks === 1 ? { active: false, job: null } : { active: true, job: running };
+    if (url.endsWith('/result')) return result;
+    return completed;
+  };
+  vm.runInContext(
+    "state.busy=false;$('source').value='paper';$('su').value=.23;$('sl').value=.1;",
+    ctx,
+  );
+  await vm.runInContext('runAnalysis({preventDefault(){}})', ctx);
+  if (posts !== 1 || vm.runInContext('state.busy', ctx))
+    throw Error('BUSY race submitted duplicate or locked UI');
+  console.log('PASS BUSY race resumes existing job with no duplicate submission');
+  console.log(
+    'PASS active-job recovery without duplicate submit, UI unlock and expired job cleanup',
+  );
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

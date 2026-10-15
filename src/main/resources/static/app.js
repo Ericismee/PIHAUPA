@@ -187,6 +187,8 @@ function showJobStatus(status) {
   }
   $('cancel-run').disabled = !status.canCancel;
   $('cancel-run').hidden = status.state !== 'RUNNING';
+  $('cancel-active-job').hidden = status.state !== 'RUNNING';
+  $('cancel-active-job').disabled = !status.canCancel;
   $('live-phase').textContent = phases[status.phase] || status.state;
   $('live-total').textContent = 'Tổng: ' + num(status.elapsedMs / 1000) + ' s';
   $('live-read').textContent =
@@ -378,7 +380,156 @@ async function pollJob(id) {
   }
 }
 let sizeSuiteRunning = false;
-async function runAnalysis(event) {
+async function observeJob(job, configuration = null) {
+  currentJob = job.id;
+  setBusy(true);
+  $('progress-panel').hidden = false;
+  $('progress-panel').open = true;
+  try {
+    currentJob = job.id;
+    try {
+      localStorage.setItem('pihaupa.lastJob', job.id);
+    } catch {}
+    let status = job;
+    showJobStatus(status);
+    while (status.state === 'RUNNING') {
+      showJobStatus(status);
+      $('status').textContent =
+        status.lines.at(-1) || 'Java đang xử lý; số liệu sẽ xuất hiện khi hoàn tất.';
+      $('progress-log').textContent = status.lines.join('\n');
+      await new Promise((resolve) => setTimeout(resolve, 650));
+      status = await pollJob(job.id);
+    }
+    showJobStatus(status);
+    $('progress-log').textContent = status.lines.join('\n');
+    if (status.state === 'CANCELLED') {
+      runPhase = 'CANCELLED';
+      notifyStatus('Đã hủy phân tích', 'Không sử dụng kết quả dở dang.');
+      render();
+      return;
+    }
+    if (status.state === 'FAILED')
+      throw Object.assign(new Error(status.error), { code: status.code, action: status.action });
+    const result = await request('/api/jobs/' + job.id + '/result');
+    result.configuration = configuration || {
+      source:
+        result.manifest?.sourceKind === 'paper'
+          ? 'paper'
+          : state.datasets.find((d) => d.name === result.source)?.id || 'upload',
+      su: result.report.upperThreshold,
+      sl: result.report.lowerThreshold,
+      format: result.manifest?.format || 'transactions',
+      fileModified: 0,
+      repeats: result.measurement.repetitions || 1,
+      sizePercent: result.manifest?.sizePercent || 100,
+    };
+    runPhase = 'COMPLETED';
+    notifyStatus(
+      'Phân tích hoàn tất',
+      result.source +
+        ' · ' +
+        num(result.report.transactionCount, 0) +
+        ' giao dịch · ' +
+        last(result.report).largePatterns.length +
+        ' HAUP.',
+      'success',
+    );
+    state.current = result;
+    $('progress-panel').open = false;
+    state.patternSearch = '';
+    state.patternType = 'ALL';
+    state.patternPage = 0;
+    state.batchIndex = result.report.batches.length - 1;
+    state.history.unshift(result);
+    state.history = state.history.slice(0, 8);
+    $('status').textContent =
+      'Đã hoàn tất · ' +
+      result.source +
+      ' · ' +
+      num(result.report.transactionCount, 0) +
+      ' giao dịch. Số liệu đã được cập nhật.';
+    if (['datasets', 'glossary', 'verification', 'testcases', 'runs'].includes(state.page))
+      location.hash = 'overview';
+    else render();
+    document
+      .getElementById('analysis-final')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } finally {
+    currentJob = null;
+    setBusy(false);
+    $('export-zip').disabled = !state.current;
+    $('export').disabled = !state.current || !!state.current.archived;
+    $('export-txt').disabled = !state.current || !!state.current.archived;
+  }
+}
+let recoveringJob = false;
+async function recoverActiveJob(includeLast = false) {
+  if (recoveringJob) return true;
+  recoveringJob = true;
+  try {
+    let active = await request('/api/jobs/active');
+    if (active.job) {
+      setError('');
+      notifyStatus(
+        'Tiếp tục theo dõi lượt đang chạy',
+        active.job.source + ' · có thể hủy bằng nút Hủy lượt chạy.',
+      );
+      await observeJob(active.job);
+      return true;
+    }
+    if (active.active) {
+      setBusy(true);
+      $('cancel-run').hidden = true;
+      $('cancel-active-job').hidden = true;
+      notifyStatus(
+        'Server đang kiểm chứng hoặc chạy testcase',
+        'Đang chờ tác vụ hiện tại hoàn tất.',
+      );
+      try {
+        do {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          active = await request('/api/jobs/active');
+        } while (active.active && !active.job);
+        if (active.job) await observeJob(active.job);
+        else
+          notifyStatus(
+            'Server đã sẵn sàng',
+            'Tác vụ trước đã kết thúc. Bấm Chạy phân tích để dùng cấu hình mới.',
+          );
+      } finally {
+        if (!currentJob) setBusy(false);
+      }
+      return true;
+    }
+    if (includeLast) {
+      let id;
+      try {
+        id = localStorage.getItem('pihaupa.lastJob');
+      } catch {}
+      if (id) {
+        let previous;
+        try {
+          previous = await request('/api/jobs/' + encodeURIComponent(id));
+        } catch (error) {
+          if (error.status === 404 || error.code === 'JOB_EXPIRED') {
+            try {
+              localStorage.removeItem('pihaupa.lastJob');
+            } catch {}
+          } else throw error;
+        }
+        if (previous && previous.state === 'COMPLETED') {
+          await observeJob(previous);
+          return true;
+        }
+      }
+    }
+    return false;
+  } finally {
+    recoveringJob = false;
+  }
+}
+
+async function runAnalysis(event, retryBusy = true) {
   event.preventDefault();
   if (state.busy) return;
   const su = Number($('su').value),
@@ -438,35 +589,14 @@ async function runAnalysis(event) {
       Array(4).fill('<div class="loading-block"></div>').join('') +
       '</div>';
   try {
+    if (await recoverActiveJob()) return;
     const job = await request('/api/jobs?' + query, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       timeoutMs: selected === 'upload' ? 180000 : 15000,
       body: selected === 'upload' ? file : undefined,
     });
-    currentJob = job.id;
-    let status = job;
-    showJobStatus(status);
-    while (status.state === 'RUNNING') {
-      showJobStatus(status);
-      $('status').textContent =
-        status.lines.at(-1) || 'Java đang xử lý; số liệu sẽ xuất hiện khi hoàn tất.';
-      $('progress-log').textContent = status.lines.join('\n');
-      await new Promise((resolve) => setTimeout(resolve, 650));
-      status = await pollJob(job.id);
-    }
-    showJobStatus(status);
-    $('progress-log').textContent = status.lines.join('\n');
-    if (status.state === 'CANCELLED') {
-      runPhase = 'CANCELLED';
-      notifyStatus('Đã hủy phân tích', 'Không sử dụng kết quả dở dang.');
-      render();
-      return;
-    }
-    if (status.state === 'FAILED')
-      throw Object.assign(new Error(status.error), { code: status.code, action: status.action });
-    const result = await request('/api/jobs/' + job.id + '/result');
-    result.configuration = {
+    await observeJob(job, {
       source: selected,
       su,
       sl,
@@ -474,39 +604,24 @@ async function runAnalysis(event) {
       fileModified: file?.lastModified ?? 0,
       repeats: Number($('repeats').value),
       sizePercent: Number($('size-percent').value || 100),
-    };
-    runPhase = 'COMPLETED';
-    notifyStatus(
-      'Phân tích hoàn tất',
-      result.source +
-        ' · ' +
-        num(result.report.transactionCount, 0) +
-        ' giao dịch · ' +
-        last(result.report).largePatterns.length +
-        ' HAUP.',
-      'success',
-    );
-    state.current = result;
-    $('progress-panel').open = false;
-    state.patternSearch = '';
-    state.patternType = 'ALL';
-    state.patternPage = 0;
-    state.batchIndex = result.report.batches.length - 1;
-    state.history.unshift(result);
-    state.history = state.history.slice(0, 8);
-    $('status').textContent =
-      'Đã hoàn tất · ' +
-      result.source +
-      ' · ' +
-      num(result.report.transactionCount, 0) +
-      ' giao dịch. Số liệu đã được cập nhật.';
-    if (['datasets', 'glossary', 'verification', 'testcases', 'runs'].includes(state.page))
-      location.hash = 'overview';
-    else render();
-    document
-      .getElementById('analysis-final')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return runPhase === 'COMPLETED';
   } catch (error) {
+    if (
+      error.code === 'BUSY' ||
+      error.code === 'REQUEST_TIMEOUT' ||
+      error.code === 'NETWORK_UNAVAILABLE'
+    ) {
+      try {
+        if (await recoverActiveJob(error.code !== 'BUSY')) return;
+        if (error.code === 'BUSY' && retryBusy) {
+          setBusy(false);
+          return await runAnalysis(event, false);
+        }
+      } catch (recoveryError) {
+        error = recoveryError;
+      }
+    }
     runPhase = 'FAILED';
     setError(error);
     $('live-phase').textContent = 'Chưa hoàn tất · có lỗi';
@@ -530,8 +645,8 @@ $('run-size-suite').onclick = async () => {
       $('size-percent').value = String(percent);
       notifyStatus('Thực nghiệm kích thước', percent + '% · giữ nguyên ngưỡng');
       const previous = state.current?.id;
-      await runAnalysis({ preventDefault() {} });
-      if (runPhase !== 'COMPLETED' || state.current?.id === previous) break;
+      const submitted = await runAnalysis({ preventDefault() {} });
+      if (!submitted || runPhase !== 'COMPLETED' || state.current?.id === previous) break;
     }
     if (runPhase === 'COMPLETED') location.hash = 'measurements';
   } finally {
@@ -553,6 +668,7 @@ $('cancel-run').onclick = async () => {
     setError(error);
   }
 };
+$('cancel-active-job').onclick = () => $('cancel-run').onclick();
 async function download(format) {
   try {
     const c = state.current,
@@ -1590,6 +1706,7 @@ async function initialize() {
       $('source').append(option);
     }
     if (state.page === 'datasets') renderDatasets();
+    await recoverActiveJob(true);
   } catch (error) {
     setError(error);
   }

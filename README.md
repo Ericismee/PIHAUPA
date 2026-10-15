@@ -441,3 +441,10 @@ Parser `transactions.txt` lưu item thành `int[]`, utility thành `double[]`, d
 ### Thanh tiến độ
 
 Thanh % trong Nhật ký tính theo mốc thực sự đã hoàn tất: 1 mốc đọc/kiểm tra/hash, mỗi batch của mỗi lượt Tight (gồm warm-up), 1 mốc oracle, 1 mốc đối chiếu nếu bật, 1 mốc hoàn tất báo cáo. Trước khi biết số batch, thanh chưa xác định %. Trong lúc mở rộng mẫu, % có thể đứng yên và log vẫn cập nhật số mẫu đã duyệt; không suy ra % thời gian còn lại hoặc ETA. Chỉ job COMPLETED mới đạt 100%; lỗi/hủy giữ mức đã đạt và ghi trạng thái rõ ràng.
+
+
+### Khôi phục lượt chạy và xử lý BUSY
+
+`GET /api/jobs/active` trả lượt đang chạy trên server. Khi mở/tải lại trang hoặc gặp BUSY/timeout, web kết nối lại job đó, tiếp tục log/% và nhận kết quả thay vì gửi thêm lượt đo. Job ID gần nhất được lưu localStorage; nếu đã hoàn tất và còn trong cache, tải lại sẽ mở kết quả. ID hết hạn được xóa, không khóa UI. Nút **Hủy lượt đang chạy** nằm ngay trong nhật ký, dùng được cả ở trang Đo lường. Sau hủy, phải đợi worker dọn tài nguyên xong mới chạy lượt mới; không reset khóa để cho hai miner chạy đồng thời. Cấu hình mới không tự được chạy khi đang theo dõi lượt cũ. Chuỗi kích thước dừng nếu yêu cầu được thay bằng việc theo dõi một job đang có.
+
+BUSY vẫn là phản hồi hợp lệ của API cho các client gửi đồng thời; web tự xử lý để nối lại tác vụ. Kiểm chứng/testcase dùng cùng worker gate, được chờ đến hoàn tất. ResourceMonitor khởi tạo trong try/finally để lỗi khởi tạo không bỏ lại khóa active. API trả HTTP status trong lỗi frontend để phân biệt ID hết hạn với lỗi mạng.

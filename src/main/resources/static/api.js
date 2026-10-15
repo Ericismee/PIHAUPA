@@ -31,6 +31,7 @@ export async function request(url, options = {}) {
     if (!response.ok)
       throw Object.assign(new Error(body.error || `HTTP ${response.status}`), {
         code: body.code || 'HTTP_' + response.status,
+        status: response.status,
         action: body.action || 'Kiểm tra nhật ký và thử lại sau khi sửa lỗi.',
       });
     return body;

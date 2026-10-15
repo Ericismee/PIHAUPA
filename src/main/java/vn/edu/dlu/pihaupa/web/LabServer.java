@@ -56,6 +56,8 @@ public final class LabServer {
                 sendBytes(x,"application/zip",ReportArchive.zip(ReportArchive.tests(TestCaseRunner.snapshot())));
             } else if(path.equals("/api/testcases/run") && method.equals("POST")) {
                 send(x,200,"application/json",Json.encode(service.runTestCases()));
+            } else if (path.equals("/api/jobs/active") && method.equals("GET")) {
+                send(x,200,"application/json",service.activeStatus());
             } else if (path.equals("/api/jobs") && method.equals("POST")) {
                 double su=Double.parseDouble(q.getOrDefault("su","0.23")), sl=Double.parseDouble(q.getOrDefault("sl","0.10"));
                 if (!(sl>0 && sl<su && su<=1)) throw new IllegalArgumentException("Cần 0 < Sl < Su ≤ 1.");
