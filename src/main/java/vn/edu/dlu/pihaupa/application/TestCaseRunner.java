@@ -23,12 +23,16 @@ public final class TestCaseRunner {
         List<Map<String,Object>> results=new ArrayList<>();
         long started=System.nanoTime();
         for(Case c:definitions()){
+            Map<String,Object> memoryBefore=ResourceMonitor.instant();
             long start=System.nanoTime();
             String actual;String detail="";
             try{actual=c.action.run();}catch(Throwable failure){actual="ERROR";detail=failure.getClass().getSimpleName()+": "+failure.getMessage();}
             boolean passed=actual.equals(c.expected);
             results.add(Map.of("id",c.id,"title",c.title,"input",c.input,"expected",c.expected,
                     "actual",actual,"state",passed?"PASSED":"FAILED","detail",detail,"elapsedMs",(System.nanoTime()-start)/1e6));
+            Map<String,Object> measured=new LinkedHashMap<>(results.remove(results.size()-1));
+            measured.put("memoryBefore",memoryBefore);measured.put("memoryAfter",ResourceMonitor.instant());
+            results.add(measured);
         }
         long passed=results.stream().filter(r->r.get("state").equals("PASSED")).count();
         last=Map.of("state",passed==results.size()?"PASSED":"FAILED","passed",passed,"total",results.size(),

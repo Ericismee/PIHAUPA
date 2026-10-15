@@ -112,7 +112,11 @@ let app = fs
 app = app.replace(/sourceChanged\(\);\s*initialize\(\);\s*$/, '');
 vm.runInContext(app, ctx, { filename: 'app.js' });
 vm.runInContext(notify, ctx, { filename: 'notifications.js' });
-for (const file of ['tmp/experiment-result.json', 'tmp/experiment-large.json']) {
+for (const file of [
+  'tmp/experiment-result.json',
+  'tmp/experiment-large.json',
+  'tmp/resource-result.json',
+]) {
   if (!fs.existsSync(file)) continue;
   ctx.result = JSON.parse(fs.readFileSync(file, 'utf8'));
   vm.runInContext(
@@ -126,6 +130,8 @@ for (const file of ['tmp/experiment-result.json', 'tmp/experiment-large.json']) 
   if (!content.includes('Oracle độc lập')) throw Error('Missing verification level');
   vm.runInContext('renderMeasurements()', ctx);
   if (!el('content').innerHTML.includes('median')) throw Error('Missing repeated measurement');
+  if (ctx.result.measurement.resources && !el('content').innerHTML.includes('RAM & bộ nhớ JVM'))
+    throw Error('Missing RAM charts');
   console.log('PASS module render:', ctx.result.source);
 }
 vm.runInContext("state.busy=true;currentJob='test';setRunPhase('CANCELLING');", ctx);

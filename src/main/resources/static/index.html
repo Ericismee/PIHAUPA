@@ -201,6 +201,24 @@
                     <option value="5">5 lượt + 1 warm-up</option>
                   </select></label
                 >
+                <label class="repeat-field" for="size-percent"
+                  >Kích thước dữ liệu
+                  <select id="size-percent">
+                    <option value="25">25% đầu tệp</option>
+                    <option value="50">50% đầu tệp</option>
+                    <option value="75">75% đầu tệp</option>
+                    <option value="100" selected>100% · toàn bộ</option>
+                  </select>
+                </label>
+                <button type="button" id="run-size-suite" class="button">
+                  Thực nghiệm kích thước · 25 → 50 → 75 → 100%
+                </button>
+                <p class="subtle">
+                  Giữ nguyên Sᵤ/Sₗ và số lượt đo. Các mẫu nhỏ lấy giao dịch đầu theo thứ tự gốc,
+                  chia lại DB0/DB1/DB2. Vẫn đọc/kiểm tra toàn tệp; thời gian đọc không đại diện chi
+                  phí đọc riêng phần mẫu. Đây là thực nghiệm hiệu năng, không phải testcase khẳng
+                  định kết quả đúng.
+                </p>
                 <div class="metric-details">
                   <span id="live-read">Đọc: —</span><span id="live-algorithm">Thuật toán: —</span
                   ><span id="live-heap-detail">Đỉnh heap lấy mẫu: —</span>

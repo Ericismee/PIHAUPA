@@ -26,6 +26,20 @@ public final class ReportArchive {
         files.put("upper-bounds.csv",ExportBundle.upperBoundsCsv(r));
         files.put("report.json",job.result);
         files.put("measurements.csv",job.measurementCsv);
+        files.put("resources.json",Json.encode(job.measurements.get("resources")));
+        StringBuilder resourceCsv=new StringBuilder("elapsedMs,heapUsedMiB,heapCommittedMiB,processResidentMiB,systemUsedMiB,systemTotalMiB\n");
+        if(job.measurements.get("resources") instanceof Map<?,?> resources && resources.get("samples") instanceof List<?> samplesList)
+            for(Object entry:samplesList)if(entry instanceof Map<?,?> sample){
+                for(String key:List.of("elapsedMs","heapUsedMiB","heapCommittedMiB","processResidentMiB","systemUsedMiB","systemTotalMiB"))resourceCsv.append(sample.get(key)==null?"":sample.get(key)).append(',');
+                resourceCsv.setLength(resourceCsv.length()-1);resourceCsv.append('\n');
+            }
+        files.put("resource-samples.csv",resourceCsv.toString());
+        files.put("run-measurements.json",Json.encode(job.measurements.get("runMeasurements")));
+        StringBuilder perRun=new StringBuilder("run,runtimeMs,heapPeakMiB\n");
+        if(job.measurements.get("runMeasurements") instanceof List<?> measuredRuns){int index=0;for(Object item:measuredRuns)if(item instanceof Map<?,?> run)perRun.append(++index).append(',').append(run.get("runtimeMs")).append(',').append(run.get("heapPeakMiB")).append('\n');}
+        files.put("run-measurements.csv",perRun.toString());
+
+
         files.put("manifest.json",Json.encode(job.manifest));files.put("verification.json",Json.encode(job.oracle));
         StringBuilder samples=new StringBuilder("run,algorithmMs\n");for(int i=0;i<job.timingSamples.size();i++)samples.append(i+1).append(',').append(job.timingSamples.get(i)).append('\n');files.put("timing-samples.csv",samples.toString());
         if(job.isolatedComparisonCsv!=null)files.put("comparison.csv",job.isolatedComparisonCsv);
@@ -57,16 +71,25 @@ public final class ReportArchive {
         html.append(plot("06 · Thời gian thực đo (ms)",phaseNames,phaseValues));
         html.append(plot("06 · Công việc miner (lượt / nút)",List.of("Mẫu duyệt","Nút kết hợp"),List.of((double)r.stats().patternsVisited(),(double)r.stats().combinedNodes())));
         html.append("<details><summary>Chi tiết từng bước và căn cứ</summary><pre>").append(h(files.get("BAO_CAO.txt"))).append("</pre></details>");
+        if(job.measurements.get("resources") instanceof Map<?,?> resources && resources.get("samples") instanceof List<?> list){
+            var rows=list.stream().filter(Map.class::isInstance).map(x->(Map<?,?>)x).toList();
+            var seconds=rows.stream().map(x->String.valueOf(((Number)x.get("elapsedMs")).doubleValue()/1000)).toList();
+            for(String key:List.of("heapUsedMiB","processResidentMiB","systemUsedMiB")){
+                var valid=rows.stream().filter(x->x.get(key) instanceof Number).toList();
+                html.append(plot("RAM · "+key+" (MiB); trục X: giây",valid.stream().map(x->String.valueOf(((Number)x.get("elapsedMs")).doubleValue()/1000)).toList(),valid.stream().map(x->((Number)x.get(key)).doubleValue()).toList()));
+            }
+            html.append("<p>Lấy mẫu khoảng 1 giây, đỉnh quan sát không phải đỉnh tuyệt đối. RAM toàn máy gồm các ứng dụng khác. RAM tiến trình chỉ JVM server, không gồm JVM con. resources.json và resource-samples.csv chứa số liệu gốc.</p>");
+        }
         html.append("<h2>Đo lường của lượt chạy</h2><pre>").append(h(job.measurementCsv)).append("</pre>");
         if(job.comparison!=null||job.isolatedComparisonCsv!=null)html.append("<h2>Đối chiếu Original / Tight</h2><pre>").append(h(files.get("comparison.csv"))).append("</pre>");
         files.put("BAO_CAO.html",html.append("</body></html>").toString());
-        files.put("README.txt","Mở BAO_CAO.html để xem biểu đồ offline. BAO_CAO.txt và bao-cao.csv: phép tính đánh dấu từng bước. patterns.csv: toàn bộ mẫu quản lý. performance-by-rows.csv: số đo và quyết định từng batch. upper-bounds.csv: AUUB. measurements.csv: đọc, thuật toán, CPU, heap. manifest.json: SHA-256, JVM và cấu hình; verification.json: oracle; timing-samples.csv: từng lượt đo. report.json: toàn bộ kết quả, preview tối đa 30 giao dịch và comparison nếu có. comparison.csv chỉ có nếu đã bật đối chiếu. Không đóng gói tệp giao dịch lớn gốc; không tái chạy thuật toán khi xuất.\nHeap là đỉnh quan sát của JVM chung, không phải RSS; thời gian kiểm thử không phải benchmark bài báo.\n");
+        files.put("README.txt","Mở BAO_CAO.html để xem biểu đồ offline. BAO_CAO.txt và bao-cao.csv: phép tính đánh dấu từng bước. patterns.csv: toàn bộ mẫu quản lý. performance-by-rows.csv: số đo và quyết định từng batch. upper-bounds.csv: AUUB. measurements.csv: đọc, thuật toán, CPU, heap. resource-samples.csv/resources.json: heap, RAM tiến trình, RAM toàn máy theo thời gian. run-measurements.json/csv: runtime/heap từng lượt đo. manifest.json: SHA-256, JVM và cấu hình; verification.json: oracle; timing-samples.csv: từng lượt đo. report.json: toàn bộ kết quả, preview tối đa 30 giao dịch và comparison nếu có. comparison.csv chỉ có nếu đã bật đối chiếu. Không đóng gói tệp giao dịch lớn gốc; không tái chạy thuật toán khi xuất.\nHeap là đỉnh quan sát của JVM chung, không phải RSS; thời gian kiểm thử không phải benchmark bài báo.\n");
         return files;
     }
     public static Map<String,String> tests(Map<String,Object> result){
         @SuppressWarnings("unchecked") var cases=(List<Map<String,Object>>)result.get("cases");
-        StringBuilder csv=new StringBuilder("id,title,input,expected,actual,state,elapsedMs,detail\n");
-        for(var c:cases){for(String key:List.of("id","title","input","expected","actual","state","elapsedMs","detail"))csv.append(q(c.getOrDefault(key,""))).append(',');csv.setLength(csv.length()-1);csv.append('\n');}
+        StringBuilder csv=new StringBuilder("id,title,input,expected,actual,state,elapsedMs,detail,heapBeforeMiB,heapAfterMiB,systemUsedAfterMiB\n");
+        for(var c:cases){for(String key:List.of("id","title","input","expected","actual","state","elapsedMs","detail"))csv.append(q(c.getOrDefault(key,""))).append(',');if(c.get("memoryBefore") instanceof Map<?,?> before)csv.append(before.get("heapUsedMiB"));csv.append(',');if(c.get("memoryAfter") instanceof Map<?,?> after)csv.append(after.get("heapUsedMiB")).append(',').append(after.get("systemUsedMiB"));else csv.append(',');csv.append('\n');}
         StringBuilder html=new StringBuilder(head("Test case & đối chiếu bài báo"));
         html.append("<p>TC-P01–12: kiểm chứng ví dụ Tables 2–3, Table 5 và Eq. (5),(6),(12). TC-E/A/D: kiểm thử bổ sung của ứng dụng. Không tái lập toàn bộ benchmark trong bài báo.</p><p>01 Dữ liệu & oracle cố định → 02 Chạy Java → 03 So sánh kỳ vọng/thực tế → 04 Ghi ĐẠT/KHÔNG ĐẠT → 05 Xuất bằng chứng.</p>");
         html.append("<p>Trạng thái: ").append(h(result.get("state"))).append(" · thời điểm: ").append(h(result.getOrDefault("runAt","Chưa chạy"))).append("</p>");
@@ -81,6 +104,8 @@ public final class ReportArchive {
             html.append(plot(c.get("id")+" · AU kỳ vọng (utility)",new ArrayList<>(expected.keySet()),new ArrayList<>(expected.values())));
             if(!actual.isEmpty())html.append(plot(c.get("id")+" · AU Java (utility)",new ArrayList<>(actual.keySet()),new ArrayList<>(actual.values())));
         }
+        var memoryCases=cases.stream().filter(c->c.get("memoryAfter") instanceof Map<?,?>).toList();
+        if(!memoryCases.isEmpty())html.append(plot("Heap sau testcase (MiB); JVM chung, không phải peak",memoryCases.stream().map(c->String.valueOf(c.get("id"))).toList(),memoryCases.stream().map(c->((Number)((Map<?,?>)c.get("memoryAfter")).get("heapUsedMiB")).doubleValue()).toList()));
         html.append("<table><tr><th>Case</th><th>Đầu vào</th><th>Kỳ vọng</th><th>Thực tế</th><th>Trạng thái</th><th>ms</th></tr>");
         for(var c:cases){html.append("<tr>");for(String key:List.of("id","input","expected","actual","state","elapsedMs"))html.append("<td>").append(h(c.getOrDefault(key,"Chưa chạy"))).append("</td>");html.append("</tr>");}
         return Map.of("testcases.csv",csv.toString(),"testcases.json",Json.encode(result),"TESTCASES.html",html.append("</table></body></html>").toString());

@@ -70,6 +70,7 @@ public final class LabServer {
                     source=InputSource.upload(temporary,q.getOrDefault("name","transactions.txt"), !"quantitative".equals(q.get("format")));
                 } else throw new IllegalArgumentException("Nguồn dữ liệu không hợp lệ.");
                 try {
+                    source=InputSource.fraction(source,Integer.parseInt(q.getOrDefault("sizePercent","100")));
                     var job=service.submit(source,su,sl,Boolean.parseBoolean(q.getOrDefault("compare","false")),Integer.parseInt(q.getOrDefault("repeats","1")));
                     send(x,202,"application/json",job.status());
                 } catch (RuntimeException e) { source.cleanup(); throw e; }

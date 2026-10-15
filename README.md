@@ -390,3 +390,16 @@ Bộ kiểm tra bao gồm phép đo lặp, median/range, JVM riêng, hủy và c
 SHA-256 dataset lấy từ byte file gốc; mẫu nhúng dùng biểu diễn chuẩn hóa `canonical-input-sha256-v1`. Ngưỡng lưu riêng, không trộn vào dataset hash. Cấu hình trong hồ sơ giúp chạy lại, nhưng hồ sơ không chứa toàn bộ raw dataset. Cần giữ file gốc khớp hash.
 
 Build bằng `scripts/build.ps1` ghi revision Git và trạng thái working tree vào manifest. Build bằng công cụ không tạo build-info sẽ ghi unavailable/unknown; không gán giả một commit cho phép đo.
+
+
+### Thực nghiệm kích thước và tài nguyên
+
+Trong **Tùy chọn & giải thích**, chọn 25/50/75/100% hoặc bấm **Thực nghiệm kích thước** để chạy tuần tự bốn mức. Giữ cùng Sᵤ/Sₗ và repetitions; không tự nâng ngưỡng hoặc dừng theo timeout. Hủy/lỗi dừng cả chuỗi, kết quả hoàn tất trước đó vẫn giữ. Mẫu nhỏ là prefix theo thứ tự gốc, chia lại DB0/DB1/DB2 khoảng 80/10/10; 100% giữ nguyên các batch của nguồn. Vẫn đọc/kiểm tra và hash toàn tệp, nên thời gian đọc không đại diện đọc riêng phần mẫu. Tỷ lệ trong manifest phân biệt các prefix có cùng hash tệp gốc. Với cùng tỷ lệ Su, ngưỡng tuyệt đối thay đổi theo TU của phần dữ liệu.
+
+- Runtime: median/min/max và runtime/heap từng lượt đo; 3/5 lượt có 1 warm-up.
+- JVM heap: bộ nhớ Java đang dùng, bộ nhớ đã cấp cho JVM; số đo trước/sau batch và lấy mẫu khoảng 1 giây.
+- RAM tiến trình: working set trên Windows (`tasklist`), RSS trên Linux (`/proc/self/status`); không hỗ trợ thì null, không giả 0.
+- RAM toàn máy: total và used từ OS MXBean, gồm mọi chương trình khác. Không phải mức RAM riêng của miner.
+- Các đỉnh là đỉnh quan sát, có thể bỏ lỡ spike; các lượt dùng chung JVM và bộ nhớ còn lại từ lượt trước. JVM con Original/Tight không nằm trong RAM tiến trình server. Lấy mẫu tài nguyên có overhead; testcase heap chỉ chụp trước/sau action, không phải allocation hay peak riêng.
+
+**Đo lường & biểu đồ** có runtime/heap theo số giao dịch, bảng từng trường hợp và CSV so sánh. ZIP từng lượt thêm `resources.json`, `resource-samples.csv`, `run-measurements.json/csv`; testcase ZIP chứa memoryBefore/memoryAfter trong JSON và các cột heap/system trong CSV. API nhận `sizePercent=25|50|75|100` (mặc định 100). Kiểm tra bằng `python scripts/verify-resources.py --url http://localhost:8017` trên server thử nghiệm. Thực nghiệm kích thước đánh giá hành vi/hiệu năng, không tự xác nhận tính đúng của tập dữ liệu lớn; oracle độc lập vẫn chỉ áp dụng phạm vi dữ liệu nhỏ được hỗ trợ.

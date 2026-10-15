@@ -34,6 +34,7 @@ public final class AnalysisService implements AutoCloseable {
         worker.submit(() -> {
             job.executionThread=Thread.currentThread();
             String terminalState = "FAILED";
+            ResourceMonitor resources = new ResourceMonitor();
             try {
                 long start = System.nanoTime();
                 job.phase = "READING";
@@ -89,8 +90,11 @@ public final class AnalysisService implements AutoCloseable {
                 measurements.put("samplesMs",job.timingSamples);measurements.put("medianMs",report.elapsedNanos()/1e6);
                 measurements.put("minMs",sorted.get(0).elapsedNanos()/1e6);measurements.put("maxMs",sorted.get(sorted.size()-1).elapsedNanos()/1e6);
                 measurements.put("repetitions",repeats);
+                measurements.put("runMeasurements",measured.stream().map(r->Map.of("runtimeMs",r.elapsedNanos()/1e6,"heapPeakMiB",r.peakMemoryBytes()/1048576.)).toList());
                 measurements.put("threadCpuMs",beforeCpu >= 0 && afterCpu >= beforeCpu ? (afterCpu-beforeCpu)/1e6 : null);
                 measurements.put("heapPeakObservedMb",report.peakMemoryBytes()/1048576.);
+                measurements.put("resources",resources.snapshot());
+                measurements.put("processingMs",(System.nanoTime()-start)/1e6);
                 job.measurements=measurements;
                 job.measurementCsv="metric,value,unit\nimportMs,"+job.importMs+",ms\nalgorithmMs,"+report.elapsedNanos()/1e6+",ms\nthreadCpuMs,"+measurements.get("threadCpuMs")+",ms\nheapPeakObservedMb,"+report.peakMemoryBytes()/1048576.+",MiB\n";
                 job.manifest.put("haups",report.batches().get(report.batches().size()-1).largePatterns().size());job.manifest.put("rows",report.transactionCount());job.manifest.put("medianMs",report.elapsedNanos()/1e6);job.manifest.put("comparison",compare);job.manifest.put("comparisonIsolation",compare?"one-child-jvm-per-policy":"not-run");job.manifest.put("oracle",job.oracle);
@@ -118,6 +122,7 @@ public final class AnalysisService implements AutoCloseable {
                 job.finishedNanos = System.nanoTime();
                 if(!terminalState.equals("CANCELLED"))job.phase = "FAILED";
             } finally {
+                resources.close();
                 try { source.cleanup(); } catch (Exception e) { synchronized(job){job.lines.addLast("Không dọn được tệp tạm: "+e.getMessage());} }
                 synchronized (AnalysisService.this) {if(job.cancelRequested && !terminalState.equals("FAILED")){terminalState="CANCELLED";job.result=null;job.phase="CANCELLED";}job.executionThread=null;active = false; job.state = terminalState;}
                 Thread.interrupted();

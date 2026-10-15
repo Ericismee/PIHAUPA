@@ -196,6 +196,9 @@ function setError(error) {
 function setBusy(busy) {
   state.busy = busy;
   $('repeats').disabled = busy;
+  $('threshold-mode').disabled = busy;
+  $('size-percent').disabled = busy;
+  $('run-size-suite').disabled = busy || sizeSuiteRunning;
   $('cancel-run').hidden = !busy;
   $('cancel-run').disabled = !currentJob;
   updatePending();
@@ -222,6 +225,7 @@ function updatePending() {
       ? selected !== config.source ||
         Number($('su').value) !== config.su ||
         Number($('sl').value) !== config.sl ||
+        Number($('size-percent').value || 100) !== (config.sizePercent || 100) ||
         (selected === 'upload' &&
           (($('file').files[0]?.lastModified ?? 0) !== config.fileModified ||
             $('format').value !== config.format))
@@ -343,7 +347,8 @@ async function pollJob(id) {
     }
   }
 }
-$('run-form').addEventListener('submit', async (event) => {
+let sizeSuiteRunning = false;
+async function runAnalysis(event) {
   event.preventDefault();
   if (state.busy) return;
   const su = Number($('su').value),
@@ -367,6 +372,7 @@ $('run-form').addEventListener('submit', async (event) => {
     sl,
     compare: $('compare').checked,
     repeats: $('repeats').value,
+    sizePercent: $('size-percent').value || '100',
     kind: selected === 'paper' ? 'paper' : selected === 'upload' ? 'upload' : 'catalog',
   });
   if (selected === 'upload') {
@@ -435,6 +441,7 @@ $('run-form').addEventListener('submit', async (event) => {
       format: $('format').value,
       fileModified: file?.lastModified ?? 0,
       repeats: Number($('repeats').value),
+      sizePercent: Number($('size-percent').value || 100),
     };
     runPhase = 'COMPLETED';
     notifyStatus(
@@ -480,7 +487,26 @@ $('run-form').addEventListener('submit', async (event) => {
     $('export').disabled = !state.current || !!state.current.archived;
     $('export-txt').disabled = !state.current || !!state.current.archived;
   }
-});
+}
+$('run-form').addEventListener('submit', runAnalysis);
+$('run-size-suite').onclick = async () => {
+  if (state.busy || sizeSuiteRunning) return;
+  sizeSuiteRunning = true;
+  try {
+    for (const percent of [25, 50, 75, 100]) {
+      $('size-percent').value = String(percent);
+      notifyStatus('Thực nghiệm kích thước', percent + '% · giữ nguyên ngưỡng');
+      const previous = state.current?.id;
+      await runAnalysis({ preventDefault() {} });
+      if (runPhase !== 'COMPLETED' || state.current?.id === previous) break;
+    }
+    if (runPhase === 'COMPLETED') location.hash = 'measurements';
+  } finally {
+    sizeSuiteRunning = false;
+    setBusy(false);
+  }
+};
+$('size-percent').addEventListener('change', updatePending);
 $('export-zip').addEventListener('click', () => download('zip'));
 $('export').addEventListener('click', () => download('csv'));
 $('export-txt').addEventListener('click', () => download('txt'));
@@ -873,6 +899,114 @@ function renderPatterns(target) {
     renderPatterns(target);
   };
 }
+function renderResourceMeasurements(c) {
+  const resources = c.measurement.resources;
+  if (!resources)
+    return notice('Lượt cũ chưa có số đo RAM tiến trình và RAM toàn máy; chạy lại để lấy số đo.');
+  const samples = resources.samples || [];
+  const available = samples.filter((s) => s.processResidentMiB != null);
+  const metric = (value) => (value == null ? 'Không hỗ trợ' : num(value) + ' MiB');
+  return card(
+    'RAM & bộ nhớ JVM',
+    resources.scope,
+    `<p>Đỉnh heap: <strong>${metric(resources.heapUsedMiBPeak)}</strong> · Đỉnh RAM tiến trình: <strong>${metric(resources.processResidentMiBPeak)}</strong> · RAM toàn máy dùng nhiều nhất: <strong>${metric(resources.systemUsedMiBPeak)}</strong></p>` +
+      chart(
+        samples.map((s) => num(s.elapsedMs / 1000)),
+        [
+          { name: 'JVM heap', values: samples.map((s) => s.heapUsedMiB), color: colors.blue },
+          ...(available.length === samples.length
+            ? [
+                {
+                  name: 'RAM tiến trình Java',
+                  values: samples.map((s) => s.processResidentMiB),
+                  color: colors.green,
+                },
+              ]
+            : []),
+        ],
+        { unit: 'MiB', xLabel: 'Thời gian từ lúc bắt đầu lấy mẫu (s)', yLabel: 'Bộ nhớ' },
+      ) +
+      chart(
+        samples.map((s) => num(s.elapsedMs / 1000)),
+        [
+          {
+            name: 'RAM toàn máy đang dùng',
+            values: samples.map((s) => s.systemUsedMiB),
+            color: colors.slate,
+          },
+        ],
+        { unit: 'MiB', xLabel: 'Thời gian (s)', yLabel: 'RAM toàn máy' },
+      ) +
+      '<p class="subtle">Lấy mẫu khoảng 1 giây; đỉnh quan sát có thể bỏ lỡ đỉnh ngắn. RAM toàn máy gồm mọi ứng dụng. JVM dùng chung giữa các lượt, không phải bộ nhớ tăng thêm riêng của thuật toán. Không bao gồm RAM JVM con khi đối chiếu.</p>',
+  );
+}
+function renderSizeMeasurements() {
+  const current = state.current;
+  const runs = state.history
+    .filter(
+      (c) =>
+        c.source === current.source &&
+        c.report.upperThreshold === current.report.upperThreshold &&
+        c.report.lowerThreshold === current.report.lowerThreshold,
+    )
+    .slice()
+    .sort((a, b) => a.report.transactionCount - b.report.transactionCount);
+  return card(
+    'Thực nghiệm thay đổi kích thước dữ liệu',
+    'Cùng tệp và Sᵤ/Sₗ; kiểm tra số lượt đo trước khi so sánh.',
+    chart(
+      runs.map((c) => num(c.report.transactionCount, 0)),
+      [
+        {
+          name: 'Runtime thuật toán · median',
+          values: runs.map((c) => c.report.elapsedMs),
+          color: colors.blue,
+        },
+      ],
+      { unit: 'ms', xLabel: 'Số giao dịch', yLabel: 'Runtime' },
+    ) +
+      chart(
+        runs.map((c) => num(c.report.transactionCount, 0)),
+        [
+          {
+            name: 'Đỉnh heap thuật toán',
+            values: runs.map((c) => c.measurement.heapPeakObservedMb),
+            color: colors.green,
+          },
+        ],
+        { unit: 'MiB', xLabel: 'Số giao dịch', yLabel: 'Heap' },
+      ) +
+      table(
+        [
+          'Kích thước',
+          'Giao dịch',
+          'Sᵤ / Sₗ',
+          'Lượt đo',
+          'Runtime median (ms)',
+          'Đỉnh heap (MiB)',
+          'RAM tiến trình (MiB)',
+          'HAUP',
+        ],
+        runs.map((c) =>
+          tr([
+            num(c.manifest?.sizePercent || 100, 0) + '%',
+            num(c.report.transactionCount, 0),
+            num(c.report.upperThreshold, 10) + ' / ' + num(c.report.lowerThreshold, 10),
+            c.measurement.repetitions,
+            num(c.report.elapsedMs),
+            num(c.measurement.heapPeakObservedMb),
+            c.measurement.resources?.processResidentMiBPeak == null
+              ? 'Chưa đo'
+              : num(c.measurement.resources.processResidentMiBPeak),
+            last(c.report).largePatterns.length,
+          ]),
+        ),
+        'Bảng · Các trường hợp kích thước',
+      ),
+    '<button class="button" id="export-sizes">Xuất so sánh kích thước CSV</button>',
+  );
+}
+
 function renderMeasurements() {
   const c = state.current,
     r = c.report,
@@ -906,6 +1040,8 @@ function renderMeasurements() {
       ),
     )}</div>` +
     `<div class="two-col equal-col">${card('Các giai đoạn xử lý', 'Đọc / thuật toán: thời gian tường. CPU: thời gian CPU luồng khai phá.', chart(m.threadCpuMs == null ? ['Đọc dữ liệu', 'Thuật toán'] : ['Đọc dữ liệu', 'Thuật toán', 'CPU luồng'], [{ name: 'Thời gian', values: m.threadCpuMs == null ? [m.importMs, r.elapsedMs] : [m.importMs, r.elapsedMs, m.threadCpuMs], color: colors.blue }], { unit: 'ms' }))}${card('Khối lượng công việc của miner', 'Bộ đếm thuật toán; không phải thời gian xử lý', chart(['Mẫu đã duyệt', 'Nút kết hợp'], [{ name: 'Số lượng', values: [r.stats.patternsVisited, r.stats.combinedNodes], color: colors.slate }], { unit: 'lượt / nút' }))}</div>` +
+    renderResourceMeasurements(c) +
+    renderSizeMeasurements() +
     manifestPanel(c) +
     (c.comparison
       ? renderComparison(c.comparison)
@@ -971,6 +1107,59 @@ function renderMeasurements() {
         ]),
       ),
     )}</section>`;
+  $('export-sizes').onclick = () => {
+    const runs = state.history.filter(
+      (run) =>
+        run.source === c.source &&
+        run.report.upperThreshold === r.upperThreshold &&
+        run.report.lowerThreshold === r.lowerThreshold,
+    );
+    const quote = (value) => '"' + String(value ?? '').replaceAll('"', '""') + '"';
+    const lines = [
+      [
+        'id',
+        'source',
+        'sizePercent',
+        'rows',
+        'su',
+        'sl',
+        'repetitions',
+        'runtimeMedianMs',
+        'runtimeMinMs',
+        'runtimeMaxMs',
+        'heapPeakMiB',
+        'processResidentPeakMiB',
+        'systemUsedPeakMiB',
+        'haups',
+      ],
+      ...runs.map((run) => [
+        run.id,
+        run.source,
+        run.manifest?.sizePercent || 100,
+        run.report.transactionCount,
+        run.report.upperThreshold,
+        run.report.lowerThreshold,
+        run.measurement.repetitions,
+        run.report.elapsedMs,
+        run.measurement.minMs,
+        run.measurement.maxMs,
+        run.measurement.heapPeakObservedMb,
+        run.measurement.resources?.processResidentMiBPeak,
+        run.measurement.resources?.systemUsedMiBPeak,
+        last(run.report).largePatterns.length,
+      ]),
+    ];
+    const url = URL.createObjectURL(
+      new Blob(['\uFEFF' + lines.map((row) => row.map(quote).join(',')).join('\n')], {
+        type: 'text/csv;charset=utf-8',
+      }),
+    );
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'size-experiments.csv';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
   document.querySelectorAll('.history-open').forEach(
     (button) =>
       (button.onclick = () => {
@@ -1178,6 +1367,54 @@ async function renderTestCases() {
       '<strong>Phạm vi theo bài báo:</strong> TC-P01–12 đối chiếu ví dụ Tables 2–3, Table 5 và Eq. (5), (6), (12). TC-E/A/D là kiểm thử bổ sung của ứng dụng. 20/20 không có nghĩa tái lập toàn bộ benchmark của bài báo. TC-P dùng chung một lượt chạy mẫu; thời gian từng assertion không dùng để so tốc độ thuật toán.',
     ) +
     flow +
+    (ran && cases.every((c) => c.memoryBefore && c.memoryAfter)
+      ? card(
+          'Heap theo testcase',
+          'Hai thời điểm trước/sau case trong JVM chung; không phải peak hoặc lượng cấp phát riêng.',
+          chart(
+            cases.map((c) => c.id),
+            [
+              {
+                name: 'Trước case',
+                values: cases.map((c) => c.memoryBefore?.heapUsedMiB ?? 0),
+                color: colors.slate,
+              },
+              {
+                name: 'Sau case',
+                values: cases.map((c) => c.memoryAfter?.heapUsedMiB ?? 0),
+                color: colors.blue,
+              },
+            ],
+            { unit: 'MiB', xLabel: 'Testcase', yLabel: 'JVM heap' },
+          ),
+        )
+      : '') +
+    card(
+      'Thực nghiệm kích thước dữ liệu',
+      'Chạy riêng 25%, 50%, 75%, 100% trên cùng tệp và cùng ngưỡng.',
+      '<p>Đây là các trường hợp khảo sát runtime và RAM; không gán ĐẠT nếu chưa có đối chứng đúng/sai. Chọn dữ liệu ở trang Phân tích, mở Tùy chọn & giải thích rồi bấm Thực nghiệm kích thước. Kết quả, biểu đồ và CSV so sánh nằm ở Đo lường & biểu đồ.</p><a class="button" href="#overview">Chọn dữ liệu và chạy thực nghiệm</a>',
+    ) +
+    (ran && cases.every((c) => c.memoryBefore && c.memoryAfter)
+      ? table(
+          [
+            'Testcase',
+            'Runtime (ms)',
+            'Heap trước (MiB)',
+            'Heap sau (MiB)',
+            'RAM toàn máy sau (MiB)',
+          ],
+          cases.map((c) =>
+            tr([
+              c.id,
+              num(c.elapsedMs),
+              num(c.memoryBefore.heapUsedMiB),
+              num(c.memoryAfter.heapUsedMiB),
+              num(c.memoryAfter.systemUsedMiB),
+            ]),
+          ),
+          'Bảng · Tài nguyên từng testcase — JVM chung',
+        )
+      : '') +
     `<div class="section-row"><p class="subtle">Xuất trạng thái hiện tại, không tự chạy lại kiểm thử.</p><button id="export-tests" class="button">Xuất kiểm thử ZIP</button></div>` +
     `<div class="two-col equal-col">${card(
       'Kết quả theo nhóm',
@@ -1315,6 +1552,7 @@ async function renderRuns() {
           $('threshold-mode').value = 'custom';
           applyThresholdMode();
           $('repeats').value = c.manifest?.measuredRuns || 1;
+          $('size-percent').value = c.manifest?.sizePercent || 100;
           $('format').value = c.manifest?.format || 'transactions';
           $('compare').checked = !!c.manifest?.comparison;
           c.configuration = {
@@ -1323,6 +1561,7 @@ async function renderRuns() {
             sl: c.report.lowerThreshold,
             format: $('format').value,
             fileModified: 0,
+            sizePercent: c.manifest?.sizePercent || 100,
           };
           thresholdLabels();
           state.batchIndex = c.report.batches.length - 1;
