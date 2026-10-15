@@ -48,7 +48,7 @@ const pages = {
     'Giải thích điều kiện Tight bằng số liệu tích lũy từ lần full scan gần nhất.',
   ],
   patterns: ['Kết quả khai phá', 'Tra cứu các mẫu đang quản lý và tiện ích trung bình thực tế.'],
-  measurements: ['Hiệu năng', 'Tách chi phí đọc dữ liệu, thuật toán, CPU luồng và JVM heap.'],
+  measurements: ['Hiệu năng', 'Thời gian, bộ nhớ và re-scan theo điều kiện thực nghiệm.'],
   datasets: [
     'Bộ dữ liệu thực nghiệm',
     'Đọc trực tiếp transactions.txt; mỗi bộ dữ liệu được phân tích độc lập.',
@@ -987,9 +987,9 @@ function renderAnalysis() {
   $('content').innerHTML =
     reportNote() +
     `<nav class="analysis-guide" aria-label="Mục lục báo cáo"><a href="#analysis-summary">Tổng quan</a><span class="guide-arrow">→</span><a href="#analysis-batches">Tính toán & re-scan</a><span class="guide-arrow">→</span><a href="#analysis-patterns">Mẫu khai phá</a><span class="guide-arrow">→</span><a href="#analysis-final">Kết luận cuối</a></nav>
-    <section id="analysis-summary" class="analysis-section"><div class="analysis-heading"><h2>Tổng quan</h2></div><div id="summary-content"></div><details class="report-detail"><summary>Hiệu năng theo tiến trình chèn</summary><p class="subtle">Runtime dạng đường, memory usage dạng cột như Fig. 8–9. Số liệu từ lượt Java hiện tại.</p>${insertionCharts(state.current)}</details></section>
-    <section id="analysis-batches" class="analysis-section"><div class="analysis-heading"><div><h2>Tính toán & re-scan</h2><p>Đọc bảng từ DB0 đến batch cuối. Mở từng batch để xem phép tính.</p></div></div><div id="batches-content"></div></section>
-    <section id="analysis-patterns" class="analysis-section"><div class="analysis-heading"><div><h2>Mẫu khai phá</h2><p>Lọc LARGE / HAUP và PRE-LARGE theo batch.</p></div></div><div id="patterns-content"></div></section>` +
+    <section id="analysis-summary" class="analysis-section"><div class="analysis-heading"><h2><span class="report-step">01</span>Tổng quan</h2></div><div id="summary-content"></div><details class="report-detail"><summary>Hiệu năng theo tiến trình chèn</summary><p class="subtle">Runtime dạng đường, memory usage dạng cột như Fig. 8–9. Số liệu từ lượt Java hiện tại.</p>${insertionCharts(state.current)}</details></section>
+    <section id="analysis-batches" class="analysis-section"><div class="analysis-heading"><div><h2><span class="report-step">02</span>Tính toán & re-scan</h2><p>Đọc bảng từ DB0 đến batch cuối. Mở từng batch để xem phép tính.</p></div></div><div id="batches-content"></div></section>
+    <section id="analysis-patterns" class="analysis-section"><div class="analysis-heading"><div><h2><span class="report-step">03</span>Mẫu khai phá</h2><p>Lọc LARGE / HAUP và PRE-LARGE theo batch.</p></div></div><div id="patterns-content"></div></section>` +
     finalConclusion(state.current);
   document.querySelector('.final-all').onclick = () => {
     state.batchIndex = state.current.report.batches.length - 1;
@@ -1178,7 +1178,7 @@ function insertionCharts(c) {
     }));
   return `<div class="two-col equal-col">${card(
     'Thời gian theo tiến trình chèn',
-    'Runtime · dạng đường như Fig. 8',
+    'Thời gian xử lý từng batch',
     chart(
       labels,
       series((b) => b.elapsedMs / 1000),
@@ -1193,7 +1193,7 @@ function insertionCharts(c) {
     ),
   )}${card(
     'Bộ nhớ theo tiến trình chèn',
-    'Memory usage · dạng cột như Fig. 9',
+    'JVM heap quan sát tích lũy',
     chart(
       labels,
       series((b) => b.peakMemoryMb * 1.048576),
@@ -1249,12 +1249,48 @@ function experimentHistoryCharts(c) {
       (x) => num(x.report.upperThreshold * 100, 4) + ' / ' + num(x.report.lowerThreshold * 100, 4),
     ],
   ];
-  return modes
-    .map(
-      ([title, axis, points, label]) =>
-        `<details class="report-detail"><summary>${title} · ${points.length} lượt</summary>${points.length < 2 ? notice('Cần ít nhất 2 lượt cùng dữ liệu và điều kiện tương ứng. Chạy các ngưỡng hoặc kích thước khác nhau để có số đo so sánh.') : `<div class="two-col equal-col">${card('Thời gian chạy', 'Runtime · s', chart(points.map(label), [{ name: 'PIHAUPA · Tight', color: colors.blue, values: points.map((x) => x.report.elapsedMs / 1000) }], { kind: 'line', unit: 's', xLabel: axis, yLabel: 'Thời gian (s)' }))}${card('Bộ nhớ sử dụng', 'JVM heap · MB', chart(points.map(label), [{ name: 'Heap lấy mẫu', color: colors.blue, values: points.map((x) => x.measurement.heapPeakObservedMb * 1.048576) }], { unit: 'MB', xLabel: axis, yLabel: 'Bộ nhớ (MB)' }))}</div>`}</details>`,
-    )
-    .join('');
+  const panels = [
+    [
+      'Tiến trình chèn',
+      insertionCharts(c) +
+        table(
+          ['Batch', 'Đã chèn (%)', 'Giao dịch', 'Runtime (s)', 'Heap (MB)', 'Xử lý'],
+          c.report.batches.map((b) =>
+            tr([
+              esc(b.name),
+              num((100 * b.cumulativeTransactionCount) / c.report.transactionCount),
+              num(b.cumulativeTransactionCount, 0),
+              num(b.elapsedMs / 1000, 3),
+              num(b.peakMemoryMb * 1.048576),
+              action(b),
+            ]),
+          ),
+          'Bảng · Hiệu năng từng batch',
+        ),
+    ],
+    ...modes.map(([title, axis, points, label]) => [
+      title,
+      points.length < 2
+        ? `<div class="experiment-empty"><h3>Chưa đủ lượt so sánh</h3><p>Cần ít nhất 2 lượt cùng nguồn và cấu hình tương ứng.</p><p class="subtle">${axis === 'Sᵤ (%)' ? 'Giữ Sₗ và kích thước dữ liệu, thay Sᵤ.' : axis === 'Số giao dịch' ? 'Giữ hai ngưỡng, chạy các kích thước dữ liệu khác nhau.' : 'Giữ kích thước dữ liệu, thay cặp Sᵤ / Sₗ.'}</p></div>`
+        : `<div class="two-col equal-col">${card('Thời gian chạy', 'Runtime · s', chart(points.map(label), [{ name: 'PIHAUPA · Tight', color: colors.blue, values: points.map((x) => x.report.elapsedMs / 1000) }], { kind: 'line', unit: 's', xLabel: axis, yLabel: 'Thời gian (s)' }))}${card('Bộ nhớ sử dụng', 'JVM heap lấy mẫu · MB', chart(points.map(label), [{ name: 'Heap', color: colors.blue, values: points.map((x) => x.measurement.heapPeakObservedMb * 1.048576) }], { unit: 'MB', xLabel: axis, yLabel: 'Bộ nhớ (MB)' }))}</div>` +
+          table(
+            [axis, 'Giao dịch', 'Runtime (s)', 'Heap (MB)', 'Re-scan', 'HAUP'],
+            points.map((x) =>
+              tr([
+                esc(label(x)),
+                num(x.report.transactionCount, 0),
+                num(x.report.elapsedMs / 1000, 3),
+                num(x.measurement.heapPeakObservedMb * 1.048576),
+                num(x.report.stats.rescanCount, 0),
+                num(last(x.report).largePatterns.length, 0),
+              ]),
+            ),
+            'Bảng · ' + title,
+          ),
+    ]),
+  ];
+  // Radio native: chọn bằng bàn phím; chỉ một nhóm biểu đồ hiện tại một thời điểm.
+  return `<section class="experiment-workspace"><div class="analysis-heading"><div><h2>So sánh thực nghiệm</h2><p>Chọn nội dung cần xem. Runtime dạng đường; memory usage dạng cột.</p></div></div><div class="experiment-tabs">${panels.map(([title, body], i) => `<input class="experiment-radio" type="radio" name="performance-view" id="performance-view-${i}" ${i === 0 ? 'checked' : ''}><label class="experiment-tab" for="performance-view-${i}">${title}</label><div class="experiment-panel">${body}</div>`).join('')}</div><details class="measurement-method"><summary>Phương pháp đo & căn cứ</summary><p>Fig. 8–9: tiến trình chèn; Fig. 10–11: ngưỡng trên; Fig. 12: số giao dịch; Fig. 13–14: độ nhạy hai ngưỡng. Chọn OR + 9 lần chèn trong tùy chọn phân tích để có 10 mốc.</p><p>Runtime không gồm đọc tệp. Heap lấy mẫu của Java khác phép đo bộ nhớ C++ trong bài báo. Chỉ dùng các lượt cùng nguồn, cấu hình chèn và số lần đo; không nội suy hoặc bổ sung số liệu thuật toán chưa chạy.</p></details></section>`;
 }
 
 function renderMeasurements() {
@@ -1264,34 +1300,21 @@ function renderMeasurements() {
   $('content').innerHTML =
     reportNote() +
     `<div class="kpi-grid">${kpi('Thời gian chạy · median', num(r.elapsedMs / 1000), (m.repetitions || 1) + ' lượt · không gồm đọc tệp', 'clock', 's')}${kpi('Bộ nhớ sử dụng', num(m.heapPeakObservedMb * 1.048576), 'JVM heap · đỉnh lấy mẫu', 'measurements', 'MB')}${kpi('Số lần re-scan', num(r.stats.rescanCount, 0), 'Không tính quét ban đầu DB0', 'rescan')}${kpi('HAUP cuối', num(last(r).largePatterns.length, 0), 'AU(P) ≥ Sᵤ × TU(DB)', 'patterns')}</div>` +
-    insertionCharts(c) +
-    card(
-      'Thiết bị',
-      'Số đo lấy mẫu của máy đang chạy',
-      table(
-        [
-          'Đọc + SHA-256 (ms)',
-          'CPU luồng (ms)',
-          'RAM tiến trình Java (MiB)',
-          'RAM máy dùng (MiB)',
-          'CPU Java (%)',
-          'CPU máy (%)',
-        ],
-        [
-          tr([
-            num(m.importMs),
-            num(m.threadCpuMs),
-            num(m.resources?.processResidentMiBPeak),
-            num(m.resources?.systemUsedMiBPeak),
-            num(m.resources?.processCpuPercentPeak),
-            num(m.resources?.systemCpuPercentPeak),
-          ]),
-        ],
-      ),
-    ) +
-    `<details class="report-detail"><summary>Thiết lập thực nghiệm</summary><p>Trong Tùy chọn phân tích, chọn OR + 9 lần chèn để đo 10 mốc như Fig. 8–9. Thay Sᵤ với Sₗ cố định để đo theo ngưỡng; thay cả hai để đo độ nhạy. Chạy dãy kích thước để đo khả năng mở rộng.</p><p>Bài báo đo runtime, memory usage và số re-scan. Biểu đồ trên dùng batch thực tế của lượt hiện tại; không nội suy số liệu. Chỉ so sánh các chính sách Java đã chạy, không thay thế kết quả của các thuật toán đối chứng trong bài báo.</p></details>` +
     experimentHistoryCharts(c) +
-    `<section class="card history"><div class="card-head"><h2>Kết quả thực nghiệm</h2></div>${table(
+    `<section class="device-panel"><div class="analysis-heading"><div><h2>Thiết bị & xử lý dữ liệu</h2><p>Số đo lấy mẫu; RAM toàn máy bao gồm ứng dụng khác.</p></div></div><dl class="device-numbers">${[
+      ['Đọc + SHA-256', m.importMs, 'ms'],
+      ['CPU luồng', m.threadCpuMs, 'ms'],
+      ['RAM tiến trình Java', m.resources?.processResidentMiBPeak, 'MiB'],
+      ['RAM máy dùng', m.resources?.systemUsedMiBPeak, 'MiB'],
+      ['CPU Java', m.resources?.processCpuPercentPeak, '%'],
+      ['CPU toàn máy', m.resources?.systemCpuPercentPeak, '%'],
+    ]
+      .map(
+        ([label, value, unit]) =>
+          `<div><dt>${label}</dt><dd>${value == null ? '—' : num(value)}<small>${value == null ? '' : unit}</small></dd></div>`,
+      )
+      .join('')}</dl></section>` +
+    `<section class="card history"><div class="card-head"><h2>Lịch sử phép đo</h2></div>${table(
       [
         'Lượt',
         'Dữ liệu',

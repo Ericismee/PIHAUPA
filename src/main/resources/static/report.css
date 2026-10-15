@@ -480,3 +480,173 @@ main {
     gap: 10px;
   }
 }
+
+/* Hai trang dùng chung nhịp báo cáo; nhóm biểu đồ có bộ chọn nội dung. */
+.analysis-section {
+  margin-top: 28px;
+}
+.analysis-heading {
+  margin: 0 0 16px;
+  align-items: center;
+}
+.analysis-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+}
+.report-step {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: #edf2fb;
+  color: #45648e;
+  font-size: 12px;
+  font-weight: 650;
+  flex-shrink: 0;
+}
+.analysis-guide {
+  padding: 10px 12px;
+  gap: 8px;
+  background: #fff;
+  border-radius: 10px;
+}
+.analysis-guide a {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.analysis-guide .guide-arrow {
+  color: #a5b2c3;
+  font-size: 12px;
+}
+.experiment-workspace {
+  margin: 28px 0;
+}
+.experiment-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.experiment-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.experiment-tab {
+  order: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+.experiment-radio:checked + .experiment-tab {
+  color: #1d4ed8;
+  background: #edf3ff;
+  border-color: #b8cef8;
+  font-weight: 650;
+}
+.experiment-radio:focus-visible + .experiment-tab {
+  outline: 3px solid #9abbff;
+  outline-offset: 2px;
+}
+.experiment-panel {
+  display: none;
+  order: 1;
+  flex-basis: 100%;
+  min-width: 0;
+  margin-top: 12px;
+}
+.experiment-radio:checked + .experiment-tab + .experiment-panel {
+  display: block;
+}
+.experiment-panel > .table-wrap {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+.experiment-empty {
+  text-align: center;
+  padding: 42px 20px;
+  background: #fff;
+  border: 1px dashed #cbd6e5;
+  border-radius: 10px;
+}
+.experiment-empty h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+.experiment-empty p {
+  margin: 6px 0;
+  color: var(--muted);
+}
+.measurement-method {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.measurement-method summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.measurement-method p {
+  line-height: 1.7;
+  max-width: 100ch;
+}
+.device-panel {
+  padding: 22px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 24px 0;
+}
+.device-panel h2 {
+  font-size: 18px;
+}
+.device-numbers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px 24px;
+  margin: 20px 0 0;
+}
+.device-numbers > div {
+  min-width: 0;
+}
+.device-numbers dt {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.device-numbers dd {
+  margin: 0;
+  font-size: clamp(18px, 2vw, 25px);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.device-numbers small {
+  font-size: 12px;
+  margin-left: 5px;
+  color: var(--muted);
+}
+@media (max-width: 760px) {
+  .device-numbers {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .experiment-tab {
+    flex: 1 1 40%;
+    text-align: center;
+  }
+  .analysis-heading h2 {
+    font-size: 18px;
+  }
+  .analysis-guide .guide-arrow {
+    display: none;
+  }
+}
