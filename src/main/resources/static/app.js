@@ -271,7 +271,7 @@ function applyThresholdMode() {
         ? paper
           ? 'Ngưỡng ví dụ bài báo: 23% / 10%.'
           : 'Ngưỡng khởi đầu cũ, sát mẫu mạnh nhất; có thể ít HAUP.'
-        : 'r = max AU(item đơn) / TU(DB). Đây là mức khảo sát của ứng dụng, không phải benchmark bài báo. Hạ ngưỡng có thể tăng số mẫu, thời gian và bộ nhớ.';
+        : 'Khuyến nghị bắt đầu ở 02; thử 03 → 04 để mở rộng khảo sát. r = max AU(item đơn) / TU(DB). Đây là mức khảo sát của ứng dụng, không phải benchmark bài báo. Hạ ngưỡng có thể tăng số mẫu, thời gian và bộ nhớ.';
   thresholdLabels();
 }
 function markCustomThreshold() {
