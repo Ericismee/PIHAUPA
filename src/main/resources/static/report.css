@@ -650,3 +650,43 @@ main {
     display: none;
   }
 }
+
+/* Số liệu và công thức luôn có ngay dưới biểu đồ; bảng dài cuộn bên trong. */
+.chart-data {
+  margin: 16px 0 12px;
+}
+.chart-data > summary {
+  font-weight: 650;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.chart-data .table-wrap {
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.chart-data .data-table {
+  min-width: 320px;
+}
+.chart-data th {
+  position: sticky;
+  top: 0;
+  background: #f5f7fb;
+  z-index: 1;
+}
+.chart-formula {
+  font-variant-numeric: tabular-nums;
+  color: #263e60;
+  padding: 10px 12px;
+  border-left: 3px solid #b6c9e9;
+  background: #f0f4fa;
+  border-radius: 0 6px 6px 0;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+.chart-workings .evidence-steps {
+  font-size: 12px;
+}

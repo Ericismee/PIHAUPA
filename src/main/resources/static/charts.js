@@ -40,6 +40,7 @@ export function chart(
     yLabel = '',
     explanation = '',
     evidenceRows = [],
+    formula = '',
   } = {},
 ) {
   if (!labels.length || !series.length) {
@@ -223,8 +224,8 @@ export function chart(
   `;
 
   svg += `
-    <details class="source-note">
-      <summary>Xem số liệu biểu đồ</summary>
+    <details class="source-note chart-data" open>
+      <summary>Bảng số liệu</summary>
       <div class="table-wrap">
         <table class="data-table">
           <caption>
@@ -297,16 +298,44 @@ export function chart(
                           ? 'TU(DB)=Σ TU(T); MU(DB)=Σ MU(T).'
                           : 'Bộ đếm công việc miner; không phải thời gian.');
 
+  formula =
+    formula ||
+    (names.includes('MU(ID)')
+      ? 'MU(ID) − Sᵤ × TU(ID) ≥ (Sᵤ − Sₗ) × TU(OD) ⇒ re-scan.'
+      : names.includes('AUUB')
+        ? 'AUUB(P) = Σ MU(T), với T chứa P; MU(T) = max u(i,T).'
+        : names.includes('AU(P)')
+          ? 'AU(P) = U(P) / |P|; HAUP khi AU(P) ≥ Sᵤ × TU(DB).'
+          : names.includes('Sᵤ') || names.includes('Sₗ')
+            ? 'Ngưỡng trên = Sᵤ × TU(DB); ngưỡng dưới = Sₗ × TU(DB).'
+            : unit === 's'
+              ? 'Runtime (s) = thời gian kết thúc − thời gian bắt đầu, tính bằng ns / 10⁹. Khi đo lặp: dùng median các lượt, không gồm warm-up.'
+              : unit === 'MB'
+                ? 'Heap (MB) = số byte heap đã dùng / 1.000.000; đỉnh quan sát = max các mẫu đã lấy.'
+                : unit === 'MiB'
+                  ? 'Heap (MiB) = số byte heap đã dùng / 1.048.576; đỉnh quan sát = max các mẫu đã lấy.'
+                  : unit === 'ms'
+                    ? 'Thời gian (ms) = thời gian đo bằng ns / 10⁶. Wall time đo khoảng thời gian; CPU time đo CPU đã dùng.'
+                    : unit === 'mẫu'
+                      ? 'LARGE: AU(P) ≥ Sᵤ × TU(DB). PRE-LARGE: Sₗ × TU(DB) ≤ AU(P) < Sᵤ × TU(DB). Số mẫu = số phần tử từng tập.'
+                      : unit === 'lần'
+                        ? 'Số re-scan = tổng các batch chèn có quyết định re-scan; không tính DB0.'
+                        : unit === 'giao dịch'
+                          ? 'N tích lũy tại batch k = Σ N(batch j), với j từ 0 đến k.'
+                          : names.includes('TU(batch)')
+                            ? 'TU(batch) = Σ TU(T); TU(T) = Σ u(i,T). MU(batch) = Σ max u(i,T).'
+                            : 'Số liệu ghi nhận trực tiếp từ bộ đếm hoặc phép đo tương ứng.');
   const i = labels.length - 1;
 
   const evidence = `
     <div class="chart-explanation">
-      <strong>Căn cứ</strong>
+      <strong>Công thức áp dụng</strong>
+      <p class="chart-formula">${esc(formula)}</p>
       <p>${esc(explanation)}</p>
       ${
         evidenceRows.length
           ? `
-            <details class="chart-workings" ${expanded ? 'open' : ''}><summary>Phép tính & số liệu</summary><ol class="evidence-steps">
+            <details class="chart-workings" open><summary>Thay số & kết quả</summary><ol class="evidence-steps">
               ${evidenceRows
                 .map(
                   (row) => `
@@ -344,6 +373,7 @@ export function chart(
         yLabel,
         explanation,
         evidenceRows,
+        formula,
       },
     }),
   );

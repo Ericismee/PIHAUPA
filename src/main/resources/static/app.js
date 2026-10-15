@@ -860,7 +860,7 @@ function renderBatches(target) {
       ),
       'Bảng · Tính toán và kết quả từng batch',
     ) +
-    `<div class="batch-calculations">${r.batches.map((b) => `<details class="batch-calculation"><summary><strong>${esc(b.name)}</strong><span>${b.index === 0 ? 'Quét ban đầu' : b.rescanTriggered ? 'Re-scan' : 'Cập nhật PT'}</span><span class="subtle">Xem phép tính</span></summary><div class="batch-calculation-body"><div><h3>Utility & ngưỡng</h3><div class="metric-row"><span>TU(batch) / MU(batch)</span><strong>${num(b.batchTransactionUtility)} / ${num(b.batchMaximumUtility)}</strong></div><div class="formula">LARGE: ${num(r.upperThreshold, 6)} × ${num(b.totalTransactionUtility)} = <strong>${num(b.minUtilUpper)}</strong><br>PRE-LARGE: ${num(b.minUtilLower)} ≤ AU(P) &lt; ${num(b.minUtilUpper)}</div></div>${batchDecision(b, r)}</div></details>`).join('')}</div>` +
+    `<div class="batch-calculations">${r.batches.map((b) => `<details class="batch-calculation"><summary><strong>${esc(b.name)}</strong><span>${b.index === 0 ? 'Quét ban đầu' : b.rescanTriggered ? 'Re-scan' : 'Cập nhật PT'}</span><span class="subtle">Xem phép tính</span></summary><div class="batch-calculation-body"><div><h3>Utility & ngưỡng</h3><div class="metric-row"><span>TU(batch) / MU(batch)</span><strong>${num(b.batchTransactionUtility)} / ${num(b.batchMaximumUtility)}</strong></div><div class="formula">LARGE: ${num(r.upperThreshold, 6)} × ${num(b.totalTransactionUtility)} = <strong>${num(b.minUtilUpper)}</strong><br>Ngưỡng dưới: ${num(r.lowerThreshold, 6)} × ${num(b.totalTransactionUtility)} = <strong>${num(b.minUtilLower)}</strong><br>PRE-LARGE: ${num(b.minUtilLower)} ≤ AU(P) &lt; ${num(b.minUtilUpper)}</div></div>${batchDecision(b, r)}</div></details>`).join('')}</div>` +
     card(
       'Điều kiện re-scan qua các batch',
       'Eq. (12) · re-scan khi vế trái ≥ vế phải; không tính initial scan',
@@ -1187,6 +1187,8 @@ function insertionCharts(c) {
         unit: 's',
         xLabel: 'Tiến trình chèn (%)',
         yLabel: 'Thời gian mỗi batch (s)',
+        formula:
+          'Runtime(batch) = elapsedMs(batch) / 1.000. Tiến trình chèn (%) = N tích lũy / N toàn bộ × 100. Runtime từng batch thuộc lượt đại diện, không phải median riêng từng batch.',
         explanation:
           'Mỗi điểm là thời gian xử lý một batch, gồm khai phá và re-scan nếu có; không gồm đọc tệp. Điểm đầu là DB0.',
       },
@@ -1201,6 +1203,8 @@ function insertionCharts(c) {
         unit: 'MB',
         xLabel: 'Tiến trình chèn (%)',
         yLabel: 'JVM heap lấy mẫu (MB)',
+        formula:
+          'Heap (MB) = heap (MiB) × 1,048576. Đỉnh tích lũy = max các mẫu heap đến batch hiện tại. Tiến trình chèn (%) = N tích lũy / N toàn bộ × 100.',
         explanation:
           'Đỉnh heap quan sát tích lũy đến từng batch; MB = 1.000.000 bytes. Đây là bộ nhớ JVM Java, khác phép đo C++ của bài báo.',
       },
@@ -1313,7 +1317,9 @@ function renderMeasurements() {
         ([label, value, unit]) =>
           `<div><dt>${label}</dt><dd>${value == null ? '—' : num(value)}<small>${value == null ? '' : unit}</small></dd></div>`,
       )
-      .join('')}</dl></section>` +
+      .join(
+        '',
+      )}</dl><details class="measurement-method"><summary>Cách tính đơn vị</summary><p>RAM (MiB) = bytes / 1.048.576. CPU (%) = CPU load do hệ điều hành cung cấp × 100; số hiển thị là đỉnh lấy mẫu. CPU luồng (ms) = CPU time (ns) / 10⁶. Thời gian đọc gồm đọc tệp và SHA-256.</p></details></section>` +
     `<section class="card history"><div class="card-head"><h2>Lịch sử phép đo</h2></div>${table(
       [
         'Lượt',
