@@ -63,6 +63,18 @@ public final class Transaction {
         return total;
     }
 
+    boolean hasCompactStorage() { return compact != null; }
+
+    /** Cộng nối tiếp vào tổng hiện có, giữ nguyên thứ tự phép cộng của miner. */
+    public double accumulateUnitUtility(double total) {
+        if (compact != null) {
+            for (double value : compact.values) total += value;
+        } else {
+            for (double value : internalUtilities.values()) total += value;
+        }
+        return total;
+    }
+
     public double unitMaximumUtility() {
         if (compact != null) return compact.maximum;
         double maximum = 0;

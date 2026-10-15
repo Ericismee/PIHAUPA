@@ -24,7 +24,6 @@ import java.util.zip.ZipFile;
 
 /** Reads the six independent utility datasets without extracting the archive. */
 public final class ArchiveDatasetReader {
-    private static final java.util.regex.Pattern WHITESPACE = java.util.regex.Pattern.compile("\\s+");
     private static boolean numericItem(String value) {
         if (value.isEmpty()) return false;
         for (int i = 0; i < value.length(); i++) {
@@ -32,6 +31,53 @@ public final class ArchiveDatasetReader {
         }
         return true;
     }
+    /** Token hóa theo vị trí: không tạo String[]/regex hoặc String utility ở đường số nguyên. */
+    private static final class Tokens {
+        private String text;
+        private int index, end, start, stop;
+        void reset(String text, int from, int to) {
+            this.text = text;
+            while (from < to && text.charAt(from) <= 32) from++;
+            while (to > from && text.charAt(to - 1) <= 32) to--;
+            index = from;
+            end = to;
+        }
+        boolean next() {
+            while (index < end && space(text.charAt(index))) index++;
+            if (index == end) return false;
+            start = index;
+            while (index < end && !space(text.charAt(index))) index++;
+            stop = index;
+            return true;
+        }
+        int count() {
+            int original = index, count = 0;
+            while (next()) count++;
+            index = original;
+            return count;
+        }
+        private static boolean space(char c) {
+            return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' || c == 11;
+        }
+    }
+
+    private static double numberSpan(String text, int start, int end, String dataset, long row) {
+        while (start < end && text.charAt(start) <= 32) start++;
+        while (end > start && text.charAt(end - 1) <= 32) end--;
+        // Chỉ fast-path số nguyên dương biểu diễn chính xác trong double; dạng khác dùng JDK.
+        long value = 0;
+        if (start < end && end - start <= 15) {
+            boolean integer = true;
+            for (int i = start; i < end; i++) {
+                char c = text.charAt(i);
+                if (c < '0' || c > '9') { integer = false; break; }
+                value = value * 10 + c - '0';
+            }
+            if (integer) return (double) value;
+        }
+        return number(text.substring(start, end), dataset, row);
+    }
+
     private ArchiveDatasetReader() { }
 
     /** Read an extracted transactions.txt directly; no ZIP or investment file is required. */
@@ -46,7 +92,7 @@ public final class ArchiveDatasetReader {
         if (!(sl > 0 && sl < su && su <= 1)) throw new IllegalArgumentException("Cần 0 < Sl < Su ≤ 1.");
         MutableAudit audit = new MutableAudit(dataset == null || dataset.isBlank() ? "Dataset" : dataset);
         List<Transaction> transactions = new ArrayList<>();
-        readTransactions(source instanceof BufferedReader br ? br : new BufferedReader(source),
+        readTransactions(source instanceof BufferedReader br ? br : new BufferedReader(source, 65536),
                 audit, transactions, progress);
         if (audit.tuMismatches != 0)
             throw new IllegalArgumentException(audit.name + " có " + audit.tuMismatches + " giao dịch sai TU.");
@@ -206,6 +252,8 @@ public final class ArchiveDatasetReader {
     private static void readTransactions(BufferedReader reader, MutableAudit audit,
             List<Transaction> transactions, Consumer<String> progress) throws IOException {
         String line;
+        Tokens items = new Tokens();
+        Tokens utilities = new Tokens();
         // Pool theo từng lần đọc, không intern toàn cục: dùng chung String item giữa các giao dịch.
         Map<String, String> itemPool = new HashMap<>();
         Transaction.ItemDictionary dictionary = new Transaction.ItemDictionary();
@@ -214,24 +262,29 @@ public final class ArchiveDatasetReader {
             if(Thread.currentThread().isInterrupted())throw new java.util.concurrent.CancellationException("Đã hủy đọc dữ liệu.");
             if (line.isBlank()) continue;
             long row = ++audit.rows;
-            String[] sections = line.split(":", -1);
-            if (sections.length != 3) throw badRow(audit.name, row, "cần items:TU:itemUtilities");
-            String[] items = WHITESPACE.split(sections[0].trim());
-            String[] utilities = WHITESPACE.split(sections[2].trim());
-            if (items.length == 0 || items.length != utilities.length)
+            int firstColon = line.indexOf(':');
+            int secondColon = firstColon < 0 ? -1 : line.indexOf(':', firstColon + 1);
+            if (firstColon < 0 || secondColon < 0 || line.indexOf(':', secondColon + 1) >= 0)
+                throw badRow(audit.name, row, "cần items:TU:itemUtilities");
+            items.reset(line, 0, firstColon);
+            utilities.reset(line, secondColon + 1, line.length());
+            int count = items.count();
+            if (count == 0 || count != utilities.count())
                 throw badRow(audit.name, row, "số item và số utility không bằng nhau");
-            double declaredTU = number(sections[1], audit.name, row);
+            double declaredTU = numberSpan(line, firstColon + 1, secondColon, audit.name, row);
             if (declaredTU <= 0) throw badRow(audit.name, row, "TU phải dương");
             double calculatedTU = 0;
             double maximum = 0;
-            int[] codes = transactions == null ? null : new int[items.length];
-            double[] values = transactions == null ? null : new double[items.length];
+            int[] codes = transactions == null ? null : new int[count];
+            double[] values = transactions == null ? null : new double[count];
             rowItems.clear();
-            for (int i = 0; i < items.length; i++) {
-                String item = itemPool.computeIfAbsent(items[i], key -> key);
+            for (int i = 0; i < count; i++) {
+                items.next();
+                utilities.next();
+                String item = itemPool.computeIfAbsent(line.substring(items.start, items.stop), key -> key);
                 if (!numericItem(item) || !rowItems.add(item))
                     throw badRow(audit.name, row, "item không hợp lệ hoặc bị lặp: " + item);
-                double utility = number(utilities[i], audit.name, row);
+                double utility = numberSpan(line, utilities.start, utilities.stop, audit.name, row);
                 if (utility <= 0) throw badRow(audit.name, row, "utility phải dương");
                 calculatedTU += utility;
                 maximum = Math.max(maximum, utility);
@@ -242,8 +295,12 @@ public final class ArchiveDatasetReader {
                 audit.tuMismatches++;
             audit.totalTU += calculatedTU;
             audit.totalMU += maximum;
-            for (String item : rowItems) audit.upperBounds.merge(item, maximum, Double::sum);
-            audit.maxLength = Math.max(audit.maxLength, items.length);
+            // Audit độc lập cần AUUB; khi tạo InputData thì miner tính lại theo từng batch.
+            // Không tích lũy bản AUUB tạm không được dùng trong đường đọc phục vụ khai phá.
+            if (transactions == null) {
+                for (String item : rowItems) audit.upperBounds.merge(item, maximum, Double::sum);
+            }
+            audit.maxLength = Math.max(audit.maxLength, count);
             if (transactions != null) transactions.add(Transaction.compact("T" + row, dictionary, codes, values));
             if (row % 10_000 == 0) progress.accept(audit.name + ": đã đọc " + row + " giao dịch");
         }

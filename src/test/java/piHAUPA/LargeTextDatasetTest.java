@@ -23,6 +23,7 @@ public final class LargeTextDatasetTest {
         check(exported.contains("Su = 0.500000") && !exported.contains("Original"), "single-policy export");
         check(ExportBundle.reportCsv(input, report, "test").contains("\"AUUB\",\"2\""), "AUUB CSV");
         verifiesCompactStorageAgainstMapAndOracle();
+        verifiesNumericParsingAndSinglePassHash();
         System.out.println("Large TXT test passed.");
     }
 
@@ -53,6 +54,39 @@ public final class LargeTextDatasetTest {
             try{row.internalUtilities().clear();throw new AssertionError("mutable compact map");}catch(UnsupportedOperationException expected){}
             try{row.internalUtilities().entrySet().iterator().next().setValue(0.);throw new AssertionError("mutable compact entry");}catch(UnsupportedOperationException expected){}
         }
+    }
+
+    private static void verifiesNumericParsingAndSinglePassHash() throws Exception {
+        for(String token:java.util.List.of("1","0001","+1","1.25","1e3","0x1.0p2","9007199254740993","999999999999999","1.0D","0.0000001")){
+            InputData data=ArchiveDatasetReader.readTransactionsText(new StringReader("01:"+token+":"+token+"\n"),"numeric",.3,.1,line->{});
+            double actual=data.batches().get(0).transactions().get(0).internalUtilities().get("01");
+            check(Double.doubleToLongBits(actual)==Double.doubleToLongBits(Double.parseDouble(token)),"Numeric parser rounding: "+token);
+        }
+        var whitespace=ArchiveDatasetReader.readTransactionsText(new StringReader("\t2\f1\t:3:1\u000b2\n"),"space",.3,.1,line->{});
+        check(whitespace.batches().get(0).transactions().get(0).internalUtilities().get("1")==2.,"Whitespace parser");
+        java.nio.file.Path file=java.nio.file.Files.createTempFile("single-pass-test-",".txt");
+        try{
+            for(boolean quantitative:java.util.List.of(false,true)){
+                if(quantitative)InputWriter.writeCombined(InputParser.parseBuiltInSample(),file);
+                else java.nio.file.Files.writeString(file,"1 2:9:4 5\r\n1:2:2\r\n2:3:3\r\n");
+                var source=vn.edu.dlu.pihaupa.application.InputSource.upload(file,"hash-test",!quantitative);
+                InputData input=source.read(.3,.1,line->{});
+                String expected=java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(java.nio.file.Files.readAllBytes(file)));
+                var manifest=vn.edu.dlu.pihaupa.application.ExperimentProfile.capture(source,input,1);
+                check(expected.equals(manifest.get("sha256")),"Single-pass raw SHA mismatch");
+                check("single-pass-read-and-hash".equals(manifest.get("hashReadMode")),"Second file pass was used");
+            }
+            java.nio.file.Files.writeString(file,"1 2:9:4 5\n1:2:2\n2:3:3\n");
+            boolean rejected=false;
+            try{
+                var source=vn.edu.dlu.pihaupa.application.InputSource.upload(file,"changed",true);
+                source.read(.3,.1,line->{if(line.startsWith("Đã đọc"))try{java.nio.file.Files.writeString(file,"1:2:2\n");}catch(java.io.IOException e){throw new java.io.UncheckedIOException(e);}});
+            }catch(java.io.IOException expected){rejected=expected.getMessage().contains("thay đổi");}
+            check(rejected,"Changed file accepted");
+            java.nio.file.Files.write(file,new byte[]{(byte)0xff});
+            try{vn.edu.dlu.pihaupa.application.InputSource.upload(file,"invalid-utf8",true).read(.3,.1,line->{});throw new AssertionError("Invalid UTF-8 accepted");}
+            catch(java.nio.charset.MalformedInputException expected){}
+        }finally{java.nio.file.Files.deleteIfExists(file);}
     }
 
     private static void check(boolean condition, String message) {

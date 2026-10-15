@@ -448,3 +448,25 @@ Thanh % trong Nhật ký tính theo mốc thực sự đã hoàn tất: 1 mốc 
 `GET /api/jobs/active` trả lượt đang chạy trên server. Khi mở/tải lại trang hoặc gặp BUSY/timeout, web kết nối lại job đó, tiếp tục log/% và nhận kết quả thay vì gửi thêm lượt đo. Job ID gần nhất được lưu localStorage; nếu đã hoàn tất và còn trong cache, tải lại sẽ mở kết quả. ID hết hạn được xóa, không khóa UI. Nút **Hủy lượt đang chạy** nằm ngay trong nhật ký, dùng được cả ở trang Đo lường. Sau hủy, phải đợi worker dọn tài nguyên xong mới chạy lượt mới; không reset khóa để cho hai miner chạy đồng thời. Cấu hình mới không tự được chạy khi đang theo dõi lượt cũ. Chuỗi kích thước dừng nếu yêu cầu được thay bằng việc theo dõi một job đang có.
 
 BUSY vẫn là phản hồi hợp lệ của API cho các client gửi đồng thời; web tự xử lý để nối lại tác vụ. Kiểm chứng/testcase dùng cùng worker gate, được chờ đến hoàn tất. ResourceMonitor khởi tạo trong try/finally để lỗi khởi tạo không bỏ lại khóa active. API trả HTTP status trong lỗi frontend để phân biệt ID hết hạn với lỗi mạng.
+
+
+### Tối ưu bước 1: đọc, kiểm tra và SHA-256
+
+Khảo sát nguồn chính thức: [BufferedReader JDK 17](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/io/BufferedReader.html), [DigestInputStream](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/security/DigestInputStream.html), [Double.parseDouble](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Double.html#parseDouble(java.lang.String)), [FileChannel](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/nio/channels/FileChannel.html), [Oracle JFR](https://docs.oracle.com/en/java/javase/17/troubleshoot/troubleshoot-performance-issues-using-jfr.html), [OpenJDK JMH](https://github.com/openjdk/jmh), [FastDoubleParser của tác giả](https://github.com/wrandelshofer/FastDoubleParser). Đây là các nguồn được chọn theo vấn đề, không tuyên bố đã đọc mọi tài liệu trên Internet.
+
+Áp dụng trong mã:
+
+- Tách token bằng vị trí trong dòng, không tạo mảng String hoặc chuỗi utility ở đường số nguyên thường gặp. Số nguyên tối đa 15 chữ số được chuyển chính xác bằng long→double; số dài, thập phân, số mũ, dạng hex/suffix vẫn dùng Double.parseDouble của JDK để giữ cách làm tròn.
+- Catalog/upload dùng BufferedInputStream + DigestInputStream + UTF-8 decoder báo lỗi + BufferedReader 64 KiB. Đọc/parse/kiểm tra và SHA-256 dùng cùng một lượt byte; ExperimentProfile tái dùng digest vừa tính. Source tùy chỉnh không cung cấp digest vẫn có fallback đọc/hash riêng. Không cache tệp cũ giữa các lượt.
+- Tránh tính AUUB audit tạm khi đã xây InputData; miner vẫn tích lũy AUUB đúng theo từng batch. Chế độ inspect ZIP độc lập vẫn tính đầy đủ AUUB audit.
+- Bước kiểm tra giao dịch trong miner duyệt primitive thay Map.Entry/Double cho storage compact; cộng TU vẫn giữ thứ tự cũ. Không bỏ kiểm tra item trùng, utility dương/hữu hạn, TU, EU hoặc TID.
+- So sánh size/mtime/fileKey trước/sau đọc; nếu tệp thay đổi, báo lỗi thay vì lưu hồ sơ không nhất quán. Hash raw giữ nguyên CRLF/LF và toàn bộ byte đầu vào. Manifest có hashReadMode=single-pass-read-and-hash.
+
+ReadStageBenchmark đo đúng read + validation + SHA-256 + manifest trong JVM riêng, 3 GiB heap, 1 warm-up + median 3 lượt, không mining/sampler/UI. Trên máy hiện tại:
+
+- NewConnects: 1.054,045 → 839,025 ms, giảm khoảng 20%; 67.557 giao dịch, TU=996.517.630.255, SHA-256 trùng.
+- Accidents: 4.240,708 → 3.191,474 ms, giảm khoảng 25%; 340.183 giao dịch, TU=3.478.342.570.855, SHA-256 trùng.
+
+Số đo nhanh có ảnh hưởng JIT/GC/OS cache, không phải benchmark JMH nhiều fork và không cam kết tốc độ trên mọi máy. Tests gồm numeric bit-for-bit với JDK (leading zero, dấu cộng, số thực/mũ/hex, số nguyên lớn), whitespace, raw hash CRLF/quantitative, tệp bị đổi khi đọc và UTF-8 lỗi. Test API 6 profile vẫn giữ HAUP và TU. Chưa thêm thư viện parser ngoài, mmap hoặc parse song song vì chưa có số đo cho thấy lợi ích trên pipeline này.
+
+Tái đo: `piHAUPA.ReadStageBenchmark <DataRoot> <TênThưMụcDataset>` với classpath `target/classes;target/test-classes` sau `run-tests.ps1`. Dùng cùng tham số và JVM riêng cho bản trước/sau.

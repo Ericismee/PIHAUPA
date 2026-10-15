@@ -20,6 +20,7 @@ public interface InputSource {
     default String kind(){return "custom";}
     default String format(){return "quantitative";}
     default Path file(){return null;}
+    default String rawSha256(){return null;}
     default void cleanup() throws IOException {}
 
     /** Kịch bản kích thước: lấy prefix theo thứ tự gốc, chia lại 80/10/10. Vẫn đọc và kiểm tra toàn tệp. */
@@ -32,6 +33,7 @@ public interface InputSource {
             public String format(){return original.format();}
             public Path file(){return original.file();}
             public int sizePercent(){return percent;}
+            public String rawSha256(){return original.rawSha256();}
             public void cleanup()throws IOException{original.cleanup();}
             public InputData read(double su,double sl,Consumer<String> progress)throws IOException{
                 InputData full=original.read(su,sl,progress);
@@ -59,31 +61,67 @@ public interface InputSource {
             }
         };
     }
+    record FileRead(InputData input, String sha256) {}
+
+    /** Một lượt đọc byte cho cả parse và checksum; decoder báo lỗi UTF-8 như Files.newBufferedReader. */
+    static FileRead readFile(Path file, String name, boolean transactions, double su, double sl,
+                             Consumer<String> progress) throws IOException {
+        var before = Files.readAttributes(file, java.nio.file.attribute.BasicFileAttributes.class);
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256");
+            InputData input;
+            var decoder = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT);
+            try (var stream = new java.security.DigestInputStream(
+                    new BufferedInputStream(Files.newInputStream(file), 65536), digest);
+                 var reader = new BufferedReader(new InputStreamReader(stream, decoder), 65536)) {
+                if (transactions) input = ArchiveDatasetReader.readTransactionsText(reader, name, su, sl, progress);
+                else {
+                    InputData parsed = InputParser.parse(reader);
+                    input = new InputData(su, sl, parsed.externalUtilities(), parsed.batches());
+                }
+            }
+            var after = Files.readAttributes(file, java.nio.file.attribute.BasicFileAttributes.class);
+            if (before.size() != after.size() || !before.lastModifiedTime().equals(after.lastModifiedTime())
+                    || !java.util.Objects.equals(before.fileKey(), after.fileKey()))
+                throw new IOException("Tệp đã thay đổi trong lúc đọc; hãy chạy lại với tệp ổn định.");
+            progress.accept("Đọc/kiểm tra và SHA-256 hoàn tất trong một lượt tệp.");
+            return new FileRead(input, java.util.HexFormat.of().formatHex(digest.digest()));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IOException("Không khởi tạo được SHA-256.", e);
+        }
+    }
+
     static InputSource catalog(DatasetCatalog catalog, String id) {
         String name = catalog.name(id);
         return new InputSource() {
+            private String sha256;
             public String name() { return name; }
             public Path file(){return catalog.path(id);}
+            public String rawSha256(){return sha256;}
             public String kind(){return "catalog";}
             public String format(){return "transactions";}
             public InputData read(double su, double sl, Consumer<String> progress) throws IOException {
-                return catalog.read(id, su, sl, progress);
+                FileRead read = readFile(file(), name, true, su, sl, progress);
+                sha256 = read.sha256();
+                return read.input();
             }
         };
     }
     static InputSource upload(Path file, String name, boolean transactions) {
         return new InputSource() {
+            private String sha256;
             public String name() { return name; }
             public Path file(){return file;}
+            public String rawSha256(){return sha256;}
             public String kind(){return "upload";}
             public String format(){return transactions?"transactions":"quantitative";}
             public void cleanup() throws IOException { Files.deleteIfExists(file); }
             public InputData read(double su, double sl, Consumer<String> progress) throws IOException {
-                try (var reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
-                    if (transactions) return ArchiveDatasetReader.readTransactionsText(reader, name, su, sl, progress);
-                    InputData parsed = InputParser.parse(reader);
-                    return new InputData(su, sl, parsed.externalUtilities(), parsed.batches());
-                }
+                FileRead read = readFile(file, name, transactions, su, sl, progress);
+                sha256 = read.sha256();
+                return read.input();
             }
         };
     }

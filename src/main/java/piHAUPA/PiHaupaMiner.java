@@ -78,9 +78,7 @@ public final class PiHaupaMiner {
             checkCancelled();
             double maximum = 0.0;
             if (unitExternalUtilities) {
-                double[] runningTU = {batchTU};
-                transaction.forEachUtility((item, utility) -> runningTU[0] += utility);
-                batchTU = runningTU[0];
+                batchTU = transaction.accumulateUnitUtility(batchTU);
                 maximum = transaction.unitMaximumUtility();
             } else {
                 batchTU += transaction.transactionUtility(externalUtilities);
@@ -417,6 +415,15 @@ public final class PiHaupaMiner {
         for (Transaction transaction : batch.transactions()) {
             if (!transactionIds.add(transaction.tid())) {
                 throw new IllegalArgumentException("Duplicate transaction id across batches: " + transaction.tid());
+            }
+            if (transaction.hasCompactStorage()) {
+                transaction.forEachUtility((item, value) -> {
+                    if (!externalUtilities.containsKey(item))
+                        throw new IllegalArgumentException("Missing external utility for item " + item);
+                    if (!Double.isFinite(value) || value <= 0.0)
+                        throw new IllegalArgumentException("Internal utility must be finite and positive for item " + item + " in " + transaction.tid());
+                });
+                continue;
             }
             for (Map.Entry<String, Double> entry : transaction.internalUtilities().entrySet()) {
                 if (!externalUtilities.containsKey(entry.getKey())) {

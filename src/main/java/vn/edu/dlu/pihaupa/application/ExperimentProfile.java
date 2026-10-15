@@ -13,7 +13,10 @@ public final class ExperimentProfile {
     public static Map<String,Object> capture(InputSource source,InputData input,int repeats)throws Exception{
         MessageDigest digest=MessageDigest.getInstance("SHA-256");
         Path file=source.file();String hashKind;
-        if(file!=null){
+        String capturedHash=source.rawSha256();
+        if(file!=null && capturedHash!=null){
+            hashKind="raw-file-sha256";
+        }else if(file!=null){
             hashKind="raw-file-sha256";
             try(var in=Files.newInputStream(file)){byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))!=-1){check();digest.update(buffer,0,n);}}
         }else{
@@ -23,7 +26,7 @@ public final class ExperimentProfile {
                 out.writeInt(input.batches().size());for(var b:input.batches()){check();out.writeUTF(b.name());out.writeInt(b.transactions().size());for(var t:b.transactions()){out.writeUTF(t.tid());var iu=new TreeMap<>(t.internalUtilities());out.writeInt(iu.size());for(var e:iu.entrySet()){out.writeUTF(e.getKey());out.writeDouble(e.getValue());}}}
             }
         }
-        Map<String,Object> m=new LinkedHashMap<>();m.put("schemaVersion",1);m.put("sizePercent",source.sizePercent());m.put("selection",source.sizePercent()==100?"full-input":"ordered-prefix-repartition-80-10-10");m.put("sourceBytes",file==null?null:Files.size(file));m.put("source",source.name());m.put("format",source.format());m.put("sourceKind",source.kind());m.put("sha256",HexFormat.of().formatHex(digest.digest()));m.put("hashKind",hashKind);
+        Map<String,Object> m=new LinkedHashMap<>();m.put("schemaVersion",1);m.put("sizePercent",source.sizePercent());m.put("selection",source.sizePercent()==100?"full-input":"ordered-prefix-repartition-80-10-10");m.put("sourceBytes",file==null?null:Files.size(file));m.put("source",source.name());m.put("format",source.format());m.put("sourceKind",source.kind());m.put("sha256",capturedHash!=null?capturedHash:HexFormat.of().formatHex(digest.digest()));m.put("hashKind",hashKind);m.put("hashReadMode",capturedHash!=null?"single-pass-read-and-hash":file!=null?"separate-pass":"canonical-input");
         Properties build=new Properties();try(var resource=ExperimentProfile.class.getResourceAsStream("/build-info.properties")){if(resource!=null)build.load(resource);}
         m.put("revision",build.getProperty("revision","unavailable"));m.put("workingTreeDirty",build.getProperty("dirty","unknown"));m.put("applicationVersion",build.getProperty("version","2.0.0"));
         m.put("javaVersion",System.getProperty("java.version"));m.put("javaVendor",System.getProperty("java.vendor"));m.put("os",System.getProperty("os.name"));m.put("architecture",System.getProperty("os.arch"));m.put("processors",Runtime.getRuntime().availableProcessors());m.put("maxHeapMiB",Runtime.getRuntime().maxMemory()/1048576.);
