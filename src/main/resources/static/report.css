@@ -405,3 +405,78 @@ main {
 #run-progress-bar[data-state='FAILED']::-webkit-progress-value {
   background: #c74545;
 }
+
+/* Báo cáo theo trình tự; phép tính chi tiết mở theo từng batch. */
+.batch-calculations {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 24px;
+}
+.batch-calculation {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.batch-calculation > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  cursor: pointer;
+  padding: 14px 18px;
+}
+.batch-calculation > summary::before {
+  content: '+';
+  color: var(--muted);
+  font-size: 18px;
+}
+.batch-calculation[open] > summary::before {
+  content: '−';
+}
+.batch-calculation > summary .subtle {
+  margin-left: auto;
+  font-size: 12px;
+}
+.batch-calculation[open] > summary {
+  background: #f8faff;
+  border-bottom: 1px solid var(--border);
+}
+.batch-calculation-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  padding: 18px;
+}
+.batch-calculation-body > * {
+  min-width: 0;
+}
+.batch-calculation-body h3 {
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+.batch-calculation-body .formula {
+  overflow-wrap: anywhere;
+}
+#analysis-summary,
+#analysis-batches,
+#analysis-patterns,
+#analysis-final {
+  scroll-margin-top: 100px;
+}
+#analysis-batches .table-wrap {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+#analysis-final {
+  margin-top: 32px;
+}
+@media (max-width: 760px) {
+  .batch-calculation-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .batch-calculation > summary {
+    gap: 10px;
+  }
+}

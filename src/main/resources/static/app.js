@@ -41,10 +41,7 @@ document.querySelectorAll('#sidebar nav a').forEach((link) => {
   }
 });
 const pages = {
-  overview: [
-    'Phân tích PIHAUPA',
-    'Một báo cáo liền mạch: tổng quan → từng batch và re-scan → kết quả khai phá.',
-  ],
+  overview: ['Phân tích PIHAUPA', 'Theo dõi tính toán theo batch và xem kết luận ở cuối báo cáo.'],
   batches: ['Phân tích từng bước', 'Theo dõi utility, ngưỡng phân loại và tập mẫu qua mỗi batch.'],
   rescan: [
     'Quyết định re-scan',
@@ -783,74 +780,87 @@ function reportNote() {
 
 function renderOverview(target) {
   const c = state.current,
-    r = c.report,
-    b = last(r),
-    labels = r.batches.map((b) => b.name);
-  const counts = [
-    {
-      name: 'LARGE / HAUP',
-      values: r.batches.map((b) => b.largePatterns.length),
-      color: colors.blue,
-    },
-    {
-      name: 'PRE-LARGE đang quản lý',
-      values: r.batches.map((b) => b.preLargePatterns.length),
-      color: colors.amber,
-    },
-  ];
-  const top = [...b.largePatterns].sort((a, b) => b.averageUtility - a.averageUtility).slice(0, 6);
-  const noHaup =
-    b.largePatterns.length === 0
-      ? notice(
-          r.upperBounds[0]?.auub < b.minUtilUpper
-            ? `<strong>Không có HAUP ở ngưỡng hiện tại.</strong> max AUUB(item) = ${num(r.upperBounds[0].auub)} &lt; Sᵤ × TU(DB) = ${num(b.minUtilUpper)}: cận trên loại trừ mọi HAUP. Có thể chọn ngưỡng khác để thực nghiệm.`
-            : '<strong>Không có HAUP ở ngưỡng hiện tại.</strong> Các mẫu được khai phá đều không đạt ngưỡng LARGE. Xem bảng ngưỡng và AUUB ở Phân tích từng bước.',
-        )
-      : '';
+    r = c.report;
   target.innerHTML =
-    noHaup +
-    `<div class="kpi-grid">${kpi('Giao dịch đã xử lý', num(r.transactionCount, 0), num(r.batchCount, 0) + ' batch · ' + num(c.report.upperBounds.length, 0) + ' item', 'datasets')}${kpi('Mẫu tiện ích cao', num(b.largePatterns.length, 0), badge('LARGE / HAUP', 'green') + ' AU ≥ ' + num(b.minUtilUpper), 'patterns')}${kpi('Thời gian thuật toán', num(r.elapsedMs), 'Không bao gồm đọc tệp và UI', 'clock', 'ms')}${kpi('Số lần re-scan', num(r.stats.rescanCount, 0), 'Không tính initial scan ở DB0', 'rescan')}</div>
-  <div class="two-col">${card('Số HAUP và PRE-LARGE theo batch', 'Số mẫu sau mỗi batch dữ liệu', chart(labels, counts, { unit: 'mẫu' }), badge('Theo batch'))}${card(
-    'AU của HAUP cuối',
-    'Tối đa 6 mẫu LARGE ở batch cuối',
-    chart(
-      top.map((p) => p.name),
-      [{ name: 'AU(P)', values: top.map((p) => p.averageUtility), color: colors.green }],
-      {
-        unit: 'utility',
-        evidenceRows: auEvidence(top, b, r),
-        emptyMessage:
-          'Đã xử lý dữ liệu nhưng không có HAUP đạt ngưỡng LARGE ở lượt này. Xem giải thích cận trên và các mẫu PRE-LARGE bên dưới.',
-      },
-    ),
-  )}</div>
-  <div class="two-col equal-col history">${card(
-    'TU(DB) và ngưỡng LARGE / PRE-LARGE',
-    'Giá trị tuyệt đối trên dữ liệu tích lũy',
-    chart(
-      labels,
-      [
+    `<div class="kpi-grid">${kpi('Giao dịch', num(r.transactionCount, 0), num(r.batchCount, 0) + ' batch · ' + num(r.upperBounds.length, 0) + ' item', 'datasets')}${kpi('Thời gian khai phá', num(r.elapsedMs / 1000), 'Không gồm đọc tệp', 'clock', 's')}${kpi('Re-scan', num(r.stats.rescanCount, 0), 'Không tính quét ban đầu DB0', 'rescan')}${kpi('Ngưỡng Sᵤ / Sₗ', num(r.upperThreshold * 100, 4) + ' / ' + num(r.lowerThreshold * 100, 4), 'Tỷ lệ trên TU(DB)', 'patterns', '%')}</div>` +
+    `<div class="two-col equal-col">${card(
+      'Số mẫu theo batch',
+      'LARGE / HAUP và PRE-LARGE đang quản lý',
+      chart(
+        r.batches.map((b) => b.name),
+        [
+          {
+            name: 'LARGE / HAUP',
+            values: r.batches.map((b) => b.largePatterns.length),
+            color: colors.blue,
+          },
+          {
+            name: 'PRE-LARGE',
+            values: r.batches.map((b) => b.preLargePatterns.length),
+            color: colors.amber,
+          },
+        ],
         {
-          name: 'TU(DB)',
-          values: r.batches.map((b) => b.totalTransactionUtility),
-          color: colors.slate,
+          unit: 'mẫu',
+          xLabel: 'Batch',
+          yLabel: 'Số mẫu',
+          explanation:
+            'LARGE là kết quả HAUP tại từng batch. PRE-LARGE là vùng đệm được lưu để cập nhật; không tính vào kết quả HAUP.',
         },
-        { name: 'Sᵤ × TU(DB)', values: r.batches.map((b) => b.minUtilUpper), color: colors.blue },
-        { name: 'Sₗ × TU(DB)', values: r.batches.map((b) => b.minUtilLower), color: colors.amber },
-      ],
-      { kind: 'line', unit: 'utility' },
-    ),
-  )}${card('Căn cứ phân loại', 'Batch cuối · ' + esc(b.name), `<div class="metric-row"><span>Tổng utility TU(DB)</span><strong>${num(b.totalTransactionUtility)}</strong></div><div class="formula">LARGE: AU(P) ≥ ${num(r.upperThreshold, 17)} × ${num(b.totalTransactionUtility)} = ${num(b.minUtilUpper)}<br>PRE-LARGE: ${num(b.minUtilLower)} ≤ AU(P) &lt; ${num(b.minUtilUpper)}</div><p class="subtle">PRE-LARGE là các mẫu được quản lý trong PT. Khi không re-scan, đây không phải phép khai phá lại toàn bộ mẫu PRE-LARGE.</p><p class="source-note"><a href="#glossary">Tra cứu định nghĩa AU, AUUB, MAU →</a></p>`)}</div>`;
+      ),
+    )}${card(
+      'Ngưỡng phân loại',
+      'Tính trên database tích lũy',
+      chart(
+        r.batches.map((b) => b.name),
+        [
+          { name: 'Sᵤ × TU(DB)', values: r.batches.map((b) => b.minUtilUpper), color: colors.blue },
+          {
+            name: 'Sₗ × TU(DB)',
+            values: r.batches.map((b) => b.minUtilLower),
+            color: colors.amber,
+          },
+        ],
+        {
+          kind: 'line',
+          unit: 'utility',
+          xLabel: 'Batch',
+          yLabel: 'Ngưỡng AU (utility)',
+          explanation:
+            'LARGE: AU(P) ≥ ngưỡng trên. PRE-LARGE: ngưỡng dưới ≤ AU(P) < ngưỡng trên. TU và phép nhân cụ thể nằm trong bảng tính theo batch.',
+        },
+      ),
+    )}</div>`;
 }
 
 function renderBatches(target) {
   const r = state.current.report;
   const bounds = r.upperBounds.slice(0, 12);
   target.innerHTML =
-    notice(
-      '<strong>Các bước xử lý:</strong> 01 Đọc & kiểm tra → 02 TU/MU & ngưỡng → 03 Eq. (12), re-scan → 04 Khai phá/cập nhật PIHAUP-List/PT → 05 AU & phân loại → 06 Đo lường & xuất. Mỗi batch dùng ngưỡng trên database tích lũy.',
+    table(
+      [
+        'Batch',
+        'Giao dịch mới / tích lũy',
+        'TU(DB)',
+        'Sᵤ × TU(DB)',
+        'Sₗ × TU(DB)',
+        'HAUP / PRE-LARGE',
+        'Xử lý',
+      ],
+      r.batches.map((b) =>
+        tr([
+          esc(b.name),
+          num(b.transactionCount, 0) + ' / ' + num(b.cumulativeTransactionCount, 0),
+          num(b.totalTransactionUtility),
+          num(b.minUtilUpper),
+          num(b.minUtilLower),
+          b.largePatterns.length + ' / ' + b.preLargePatterns.length,
+          action(b),
+        ]),
+      ),
+      'Bảng · Tính toán và kết quả từng batch',
     ) +
-    `<div class="batch-grid">${r.batches.map((b) => `<section class="card batch-card"><div class="batch-title"><h2>${esc(b.name)}</h2>${action(b)}</div><div class="metric-row"><span>Giao dịch mới / tích lũy</span><strong>${num(b.transactionCount, 0)} / ${num(b.cumulativeTransactionCount, 0)}</strong></div><div class="metric-row"><span>TU(batch)</span><strong>${num(b.batchTransactionUtility)}</strong></div><div class="metric-row"><span>MU(batch) = Σ MU(T)</span><strong>${num(b.batchMaximumUtility)}</strong></div><div class="metric-row"><span>TU(DB) tích lũy</span><strong>${num(b.totalTransactionUtility)}</strong></div><div class="formula">Sᵤ × TU(DB) = ${num(r.upperThreshold, 17)} × ${num(b.totalTransactionUtility)} = ${num(b.minUtilUpper)}<br>Sₗ × TU(DB) = ${num(r.lowerThreshold, 17)} × ${num(b.totalTransactionUtility)} = ${num(b.minUtilLower)}</div><div class="metric-row"><span>HAUP / PRE-LARGE quản lý</span><strong>${b.largePatterns.length} / ${b.preLargePatterns.length}</strong></div>${batchDecision(b, r)}</section>`).join('')}</div>` +
+    `<div class="batch-calculations">${r.batches.map((b) => `<details class="batch-calculation"><summary><strong>${esc(b.name)}</strong><span>${b.index === 0 ? 'Quét ban đầu' : b.rescanTriggered ? 'Re-scan' : 'Cập nhật PT'}</span><span class="subtle">Xem phép tính</span></summary><div class="batch-calculation-body"><div><h3>Utility & ngưỡng</h3><div class="metric-row"><span>TU(batch) / MU(batch)</span><strong>${num(b.batchTransactionUtility)} / ${num(b.batchMaximumUtility)}</strong></div><div class="formula">LARGE: ${num(r.upperThreshold, 6)} × ${num(b.totalTransactionUtility)} = <strong>${num(b.minUtilUpper)}</strong><br>PRE-LARGE: ${num(b.minUtilLower)} ≤ AU(P) &lt; ${num(b.minUtilUpper)}</div></div>${batchDecision(b, r)}</div></details>`).join('')}</div>` +
     card(
       'Điều kiện re-scan qua các batch',
       'Eq. (12) · re-scan khi vế trái ≥ vế phải; không tính initial scan',
@@ -879,7 +889,13 @@ function renderBatches(target) {
             color: colors.amber,
           },
         ],
-        { unit: 'utility' },
+        {
+          unit: 'utility',
+          xLabel: 'Batch chèn',
+          yLabel: 'Giá trị hai vế (utility)',
+          explanation:
+            'Đây là biểu đồ giải thích Eq. (12), không phải biểu đồ thực nghiệm của bài báo. Vế trái ≥ vế phải thì re-scan; mở batch tương ứng để xem TU(ID), MU(ID), TU(OD).',
+        },
       ),
     ) +
     `<details class="card evidence"><summary>Xem dữ liệu đầu vào, utility và cận trên AUUB</summary><div class="card-body"><div class="two-col equal-col">${card(
@@ -970,20 +986,24 @@ function batchDecision(b, r) {
 function renderAnalysis() {
   $('content').innerHTML =
     reportNote() +
-    finalConclusion(state.current) +
-    insertionCharts(state.current) +
-    `<nav class="analysis-guide" aria-label="Mục lục báo cáo"><strong class="subtle">Trong báo cáo:</strong><a href="#analysis-final">Kết luận cuối</a><span class="guide-arrow">·</span><a href="#analysis-summary">Tổng quan kết quả</a><span class="guide-arrow" aria-hidden="true">·</span><a href="#analysis-batches">Từng batch & re-scan</a><span class="guide-arrow" aria-hidden="true">·</span><a href="#analysis-patterns">Mẫu khai phá</a></nav><section id="analysis-summary" class="analysis-section" aria-labelledby="summary-title"><div class="analysis-heading"><div><h2 id="summary-title">Tổng quan kết quả</h2><p>Đọc nhanh dữ liệu, số mẫu và chi phí xử lý.</p></div></div><div id="summary-content"></div></section><details id="analysis-batches" class="analysis-section report-detail"><summary>Batch & điều kiện re-scan</summary><section aria-labelledby="batches-title"><div class="analysis-heading"><div><h2 id="batches-title">Từng batch & quyết định re-scan</h2><p>Utility, ngưỡng và lý do quét lại nằm ngay trong mỗi batch.</p></div></div><div id="batches-content"></div></section></details><section id="analysis-patterns" class="analysis-section" aria-labelledby="patterns-title"><div class="analysis-heading"><div><h2 id="patterns-title">Kết quả khai phá</h2><p>Mặc định xem batch cuối; lọc hoặc tìm mẫu ngay tại đây.</p></div></div><div id="patterns-content"></div></section>`;
+    `<nav class="analysis-guide" aria-label="Mục lục báo cáo"><a href="#analysis-summary">Tổng quan</a><span class="guide-arrow">→</span><a href="#analysis-batches">Tính toán & re-scan</a><span class="guide-arrow">→</span><a href="#analysis-patterns">Mẫu khai phá</a><span class="guide-arrow">→</span><a href="#analysis-final">Kết luận cuối</a></nav>
+    <section id="analysis-summary" class="analysis-section"><div class="analysis-heading"><h2>Tổng quan</h2></div><div id="summary-content"></div><details class="report-detail"><summary>Hiệu năng theo tiến trình chèn</summary><p class="subtle">Runtime dạng đường, memory usage dạng cột như Fig. 8–9. Số liệu từ lượt Java hiện tại.</p>${insertionCharts(state.current)}</details></section>
+    <section id="analysis-batches" class="analysis-section"><div class="analysis-heading"><div><h2>Tính toán & re-scan</h2><p>Đọc bảng từ DB0 đến batch cuối. Mở từng batch để xem phép tính.</p></div></div><div id="batches-content"></div></section>
+    <section id="analysis-patterns" class="analysis-section"><div class="analysis-heading"><div><h2>Mẫu khai phá</h2><p>Lọc LARGE / HAUP và PRE-LARGE theo batch.</p></div></div><div id="patterns-content"></div></section>` +
+    finalConclusion(state.current);
   document.querySelector('.final-all').onclick = () => {
     state.batchIndex = state.current.report.batches.length - 1;
     state.patternType = 'LARGE';
     state.patternSearch = '';
     state.patternPage = 0;
     renderPatterns($('patterns-content'));
+    $('analysis-patterns').scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   };
   renderOverview($('summary-content'));
   renderBatches($('batches-content'));
   renderPatterns($('patterns-content'));
 }
+
 function renderPatterns(target) {
   const r = state.current.report,
     b = r.batches[Math.min(state.batchIndex, r.batches.length - 1)],

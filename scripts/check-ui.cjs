@@ -124,8 +124,8 @@ for (const file of [
     ctx,
   );
   const content = el('content').innerHTML;
-  if (content.indexOf('id="analysis-final"') > content.indexOf('id="analysis-summary"'))
-    throw Error('Result must lead');
+  if (content.indexOf('id="analysis-final"') < content.indexOf('id="analysis-patterns"'))
+    throw Error('Final conclusion must follow patterns');
   if (!content.includes('final-numbers')) throw Error('Missing final numeric summary');
   if (!content.includes('Oracle độc lập')) throw Error('Missing verification level');
   vm.runInContext('renderMeasurements()', ctx);
