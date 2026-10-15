@@ -24,6 +24,14 @@ import java.util.zip.ZipFile;
 
 /** Reads the six independent utility datasets without extracting the archive. */
 public final class ArchiveDatasetReader {
+    private static final java.util.regex.Pattern WHITESPACE = java.util.regex.Pattern.compile("\\s+");
+    private static boolean numericItem(String value) {
+        if (value.isEmpty()) return false;
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) < '0' || value.charAt(i) > '9') return false;
+        }
+        return true;
+    }
     private ArchiveDatasetReader() { }
 
     /** Read an extracted transactions.txt directly; no ZIP or investment file is required. */
@@ -198,14 +206,17 @@ public final class ArchiveDatasetReader {
     private static void readTransactions(BufferedReader reader, MutableAudit audit,
             List<Transaction> transactions, Consumer<String> progress) throws IOException {
         String line;
+        // Pool theo từng lần đọc, không intern toàn cục: dùng chung String item giữa các giao dịch.
+        Map<String, String> itemPool = new HashMap<>();
+        Set<String> rowItems = new HashSet<>();
         while ((line = reader.readLine()) != null) {
             if(Thread.currentThread().isInterrupted())throw new java.util.concurrent.CancellationException("Đã hủy đọc dữ liệu.");
             if (line.isBlank()) continue;
             long row = ++audit.rows;
             String[] sections = line.split(":", -1);
             if (sections.length != 3) throw badRow(audit.name, row, "cần items:TU:itemUtilities");
-            String[] items = sections[0].trim().split("\\s+");
-            String[] utilities = sections[2].trim().split("\\s+");
+            String[] items = WHITESPACE.split(sections[0].trim());
+            String[] utilities = WHITESPACE.split(sections[2].trim());
             if (items.length == 0 || items.length != utilities.length)
                 throw badRow(audit.name, row, "số item và số utility không bằng nhau");
             double declaredTU = number(sections[1], audit.name, row);
@@ -213,10 +224,10 @@ public final class ArchiveDatasetReader {
             double calculatedTU = 0;
             double maximum = 0;
             Map<String, Double> values = transactions == null ? null : new LinkedHashMap<>();
-            Set<String> rowItems = new HashSet<>();
+            rowItems.clear();
             for (int i = 0; i < items.length; i++) {
-                String item = items[i];
-                if (!item.matches("[0-9]+") || !rowItems.add(item))
+                String item = itemPool.computeIfAbsent(items[i], key -> key);
+                if (!numericItem(item) || !rowItems.add(item))
                     throw badRow(audit.name, row, "item không hợp lệ hoặc bị lặp: " + item);
                 double utility = number(utilities[i], audit.name, row);
                 if (utility <= 0) throw badRow(audit.name, row, "utility phải dương");

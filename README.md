@@ -408,3 +408,22 @@ Trong **Tùy chọn & giải thích**, chọn 25/50/75/100% hoặc bấm **Thự
 ### Nhật ký quy trình
 
 Nhật ký hiển thị ngay dưới cấu hình, tự mở khi bắt đầu và thu gọn khi hoàn tất. Mỗi dòng có thời gian tương đối từ đầu job, chính sách và batch: kiểm tra TU/MU → quyết định re-scan (hai vế điều kiện) → xây PIHAUP-List → tái cấu trúc AUUB/MRU/MRN → mở rộng/cắt tỉa → xây hoặc cập nhật PT → oracle → đối chiếu → lưu báo cáo. Khi mở rộng lâu, cập nhật số mẫu đã duyệt/nút kết hợp khoảng 2 giây, kiểm tra tại các mốc 1.024 mẫu; đây không phải % hoàn thành hay ETA. Giữ 500 dòng gần nhất để giới hạn bộ nhớ. ZIP có `process.log`; report.json có `processLog` chụp trước khi lưu hồ sơ, nên không chứa sự kiện sau thời điểm lưu.
+
+
+### Tối ưu pipeline dữ liệu lớn (15/10/2026)
+
+Giữ nguyên Sᵤ/Sₗ, công thức AU/AUUB/MAU, tập LARGE/PRE-LARGE và điều kiện re-scan:
+
+- Parser dùng chung Pattern khoảng trắng, kiểm tra mã item không tạo regex cho từng item, tái dùng set kiểm tra trùng từng dòng và pool String mã item theo mỗi lần đọc. Kiểm tra TU/utility/item trùng vẫn giữ nguyên; không intern hoặc cache toàn cục.
+- Xây PIHAUP-List chỉ tạo node vượt cận dưới, tái sử dụng AUUB đã tích lũy từ toàn bộ giao dịch thay vì tính MU/AUUB lại. Không thay TU/MU bằng giá trị từ giao dịch đã cắt item.
+- Tái cấu trúc dùng mảng theo vị trí giao dịch thay HashMap TID. Ghép conditional list bằng hai con trỏ, không tạo HashMap ở mỗi phép ghép. Thứ tự là vị trí giao dịch gốc, không phụ thuộc TID số, chuỗi hoặc thứ tự từ điển. Có kiểm tra hủy trong vòng ghép dài.
+
+Đo trong hai JVM riêng trước/sau, heap tối đa 3 GiB, 1 warm-up + median 3 lượt, cùng máy/tệp/ngưỡng; không gồm UI, resource sampler, SHA-256 hay export:
+
+- NewConnects, 67.557 giao dịch, Su=0,0358694 / Sl=0,0355071: đọc 1.552,476 → 1.136,556 ms; mining 1.671,239 → 870,593 ms. Tổng hai median giảm khoảng 38%. Kết quả giữ nguyên 1 HAUP, 0 PRE-LARGE, 2 re-scan.
+- NewMushroom, 8.416 giao dịch, Su=0,05 / Sl=0,02: đọc 101,230 → 82,726 ms; mining 1.085,462 → 438,976 ms. Tổng hai median giảm khoảng 56%. Kết quả giữ nguyên 5 HAUP, 311 PRE-LARGE, 0 re-scan.
+- Byte cấp phát median của luồng benchmark (đọc/mining và tạo chữ ký) giảm từ 5.110.818.920 → 1.921.346.576 ở NewConnects và 2.171.344.536 → 1.003.670.816 ở NewMushroom. Đây là tổng byte cấp phát trong pipeline, không phải RAM đang dùng hoặc peak heap.
+
+Chữ ký SHA-256 của action, LARGE/PRE-LARGE và AU **ở mọi batch** trùng trước/sau trên hai cấu hình trên. Test oracle vét cạn/ngẫu nhiên, ranh giới, parser và TID không theo thứ tự vẫn đạt. Các mức tăng tốc là số đo máy hiện tại, không cam kết cho mọi bộ dữ liệu/ngưỡng. Không thêm cache input để tránh giữ thêm dữ liệu lớn trong RAM hoặc làm sai phạm vi đo đọc tệp.
+
+Công cụ tái đo: `PipelineBenchmark` trong `src/test/java/piHAUPA/PipelineBenchmark.java`, nhận `transactions.txt Su Sl`; dùng classpath `target/classes;target/test-classes` sau khi biên dịch test. In median đọc/mining, byte cấp phát và chữ ký kết quả để kiểm tra trước/sau.

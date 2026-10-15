@@ -198,43 +198,40 @@ public final class PiHaupaMiner {
     private ListNodeList constructGlobalList(List<Transaction> transactions) {
         double lower = lowerThreshold * totalTransactionUtility;
         Map<String, PiNode> byItem = new LinkedHashMap<>();
-        Map<String, Double> auub = new HashMap<>();
+        // Chỉ tạo node cho item vượt cận dưới; AUUB đã tích lũy trong processBatch.
+        globalAuub.forEach((item, bound) -> {
+            if (bound >= lower) byItem.put(item, new PiNode(item));
+        });
+        int transactionIndex = 0;
         for (Transaction transaction : transactions) {
             checkCancelled();
-            double mu = unitExternalUtilities
-                    ? transaction.internalUtilities().values().stream().mapToDouble(Double::doubleValue)
-                            .max().orElse(0.0)
-                    : transaction.maximumUtility(externalUtilities);
             for (String item : transaction.internalUtilities().keySet()) {
-                // AU(P) <= AUUB(i) for every i in P. An item below Sl*TU(DB)
-                // cannot belong to any managed pattern. Keep MU(T) from the full
-                // transaction above; pruning must not change transaction utility.
-                if (globalAuub.getOrDefault(item,0.0) < lower) continue;
+                PiNode node = byItem.get(item);
+                if (node == null) continue;
                 double utility = unitExternalUtilities ? transaction.internalUtilities().get(item)
                         : transaction.utilityOf(item, externalUtilities);
-                PiNode node = byItem.computeIfAbsent(item, PiNode::new);
                 node.sumUtility += utility;
-                node.entries.add(new PiEntry(transaction.tid(), utility, 0.0));
-                auub.merge(item, mu, Double::sum);
+                node.entries.add(new PiEntry(transactionIndex, utility, 0.0));
             }
+            transactionIndex++;
         }
         List<PiNode> nodes = new ArrayList<>(byItem.values());
         for (PiNode node : nodes) {
-            node.auub = auub.getOrDefault(node.item, 0.0);
+            node.auub = globalAuub.getOrDefault(node.item, 0.0);
         }
         nodes.sort(Comparator.comparingDouble((PiNode n) -> n.auub).thenComparing(n -> n.item));
         return new ListNodeList(nodes);
     }
 
     private void restructure(List<PiNode> nodes) {
-        Map<String, TempRemaining> temp = new HashMap<>();
+        TempRemaining[] temp = new TempRemaining[allTransactions.size()];
         for (int i = nodes.size() - 1; i >= 0; i--) {
             checkCancelled();
             PiNode node = nodes.get(i);
             for (PiEntry entry : node.entries) {
-                TempRemaining remaining = temp.get(entry.tid);
+                TempRemaining remaining = temp[entry.transactionIndex];
                 if (remaining == null) {
-                    temp.put(entry.tid, new TempRemaining(entry.utility, 1));
+                    temp[entry.transactionIndex] = new TempRemaining(entry.utility, 1);
                 } else {
                     entry.maximumRemainingUtility = remaining.maximumRemainingUtility;
                     node.maximumRemainingNumber = Math.max(node.maximumRemainingNumber, remaining.remainingNumber);
@@ -303,21 +300,30 @@ public final class PiHaupaMiner {
         PiNode combined = new PiNode(right.item);
         combined.auub = Math.min(left.auub, right.auub);
         combined.maximumRemainingNumber = Math.min(left.maximumRemainingNumber, right.maximumRemainingNumber);
-        Map<String, PiEntry> rightEntries = new HashMap<>();
-        for (PiEntry entry : right.entries) {
-            rightEntries.put(entry.tid, entry);
-        }
-        for (PiEntry leftEntry : left.entries) {
-            PiEntry rightEntry = rightEntries.get(leftEntry.tid);
-            if (rightEntry == null) {
+        // Các list giữ cùng thứ tự giao dịch gốc. Merge hai con trỏ thay HashMap mới mỗi phép ghép.
+        // Chỉ số là vị trí trong allTransactions, không giả định TID là số hoặc đã sắp xếp.
+        int leftIndex = 0;
+        int rightIndex = 0;
+        while (leftIndex < left.entries.size() && rightIndex < right.entries.size()) {
+            if (((leftIndex + rightIndex) & 4095) == 0) checkCancelled();
+            PiEntry leftEntry = left.entries.get(leftIndex);
+            PiEntry rightEntry = right.entries.get(rightIndex);
+            if (leftEntry.transactionIndex < rightEntry.transactionIndex) {
+                leftIndex++;
+                continue;
+            }
+            if (leftEntry.transactionIndex > rightEntry.transactionIndex) {
+                rightIndex++;
                 continue;
             }
             double utility = leftEntry.utility + rightEntry.utility - leftEntry.prefixUtility;
-            double prefixUtility = leftEntry.utility;
-            PiEntry entry = new PiEntry(leftEntry.tid, utility, prefixUtility);
-            entry.maximumRemainingUtility = Math.max(leftEntry.maximumRemainingUtility, rightEntry.maximumRemainingUtility);
+            PiEntry entry = new PiEntry(leftEntry.transactionIndex, utility, leftEntry.utility);
+            entry.maximumRemainingUtility = Math.max(leftEntry.maximumRemainingUtility,
+                    rightEntry.maximumRemainingUtility);
             combined.entries.add(entry);
             combined.sumUtility += utility;
+            leftIndex++;
+            rightIndex++;
         }
         return combined;
     }
@@ -445,13 +451,13 @@ public final class PiHaupaMiner {
     }
 
     private static final class PiEntry {
-        private final String tid;
+        private final int transactionIndex;
         private final double utility;
         private final double prefixUtility;
         private double maximumRemainingUtility;
 
-        private PiEntry(String tid, double utility, double prefixUtility) {
-            this.tid = tid;
+        private PiEntry(int transactionIndex, double utility, double prefixUtility) {
+            this.transactionIndex = transactionIndex;
             this.utility = utility;
             this.prefixUtility = prefixUtility;
         }

@@ -18,6 +18,7 @@ public final class PiHaupaSelfTest {
     public static void main(String[] args) {
         verifiesPaperExampleAndBruteForceCompleteness();
         verifiesOriginalAndTightComparison();
+        verifiesUnsortedNonNumericTransactionIds();
         verifiesRandomSmallStreamsAgainstBruteForce();
         verifiesManagedTrieOnWideIncrement();
         verifiesTightRescanBoundaryAndAccumulation();
@@ -25,6 +26,27 @@ public final class PiHaupaSelfTest {
         verifiesNonPositiveDenominatorDoesNotReverseCondition();
         verifiesInvalidThresholdsAndDuplicateIds();
         System.out.println("PIHAUPA self-tests passed.");
+    }
+
+    /** Merge theo vị trí giao dịch phải đúng cả khi TID không tăng dần hoặc không phải số. */
+    private static void verifiesUnsortedNonNumericTransactionIds() {
+        InputData paper=InputParser.parseBuiltInSample();
+        List<String> ids=List.of("T20","T3","alpha","T1","T10","z","T2","beta","T0");
+        List<Batch> renamed=new ArrayList<>();int index=0;
+        for(Batch batch:paper.batches()){
+            List<Transaction> rows=new ArrayList<>();
+            for(Transaction row:batch.transactions())rows.add(new Transaction(ids.get(index++),row.internalUtilities()));
+            renamed.add(new Batch(batch.name(),rows));
+        }
+        for(RescanPolicy policy:RescanPolicy.values()){
+            AnalysisReport expected=AnalysisReport.run(paper,policy);
+            AnalysisReport actual=AnalysisReport.run(new InputData(paper.upperThreshold(),paper.lowerThreshold(),paper.externalUtilities(),renamed),policy);
+            for(int i=0;i<actual.batchCount();i++){
+                require(toMap(expected.batches().get(i).largePatterns()).equals(toMap(actual.batches().get(i).largePatterns())),"Unsorted TID changed HAUP");
+                require(toMap(expected.batches().get(i).preLargePatterns()).equals(toMap(actual.batches().get(i).preLargePatterns())),"Unsorted TID changed PRE-LARGE");
+            }
+            require(expected.stats().rescanCount()==actual.stats().rescanCount(),"Renaming TID changed re-scan");
+        }
     }
 
     private static void verifiesOriginalAndTightComparison() {
