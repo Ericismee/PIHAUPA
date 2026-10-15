@@ -215,8 +215,8 @@ Skeleton Screen là **UI/UX design pattern** dùng placeholder mô phỏng vùng
 ### Code áp dụng
 
 - [app.js — skeleton cho lượt phân tích đầu](src/main/resources/static/app.js#L135)
-- [app.js — skeleton kiểm chứng](src/main/resources/static/app.js#L251)
-- [app.js — skeleton danh mục test](src/main/resources/static/app.js#L265)
+- [app.js — skeleton kiểm chứng](src/main/resources/static/app.js#L257)
+- [app.js — skeleton danh mục test](src/main/resources/static/app.js#L271)
 - [styles.css — khối placeholder](src/main/resources/static/styles.css#L5)
 
 Đoạn tạo bốn khối chờ khi phân tích lần đầu:
