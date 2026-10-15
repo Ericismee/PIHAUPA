@@ -18,7 +18,7 @@ export const icon = (name) =>
   `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[name] || icons.overview}"/></svg>`;
 export const badge = (text, kind = 'neutral') => `<span class="tag ${kind}">${esc(text)}</span>`;
 export const card = (title, subtitle, body, extra = '') =>
-  `<section class="card"><div class="card-head"><div><h2>${body.includes('class="chart-widget"') ? 'Biểu đồ · ' : ''}${title}</h2><p>${subtitle}</p></div>${extra}</div><div class="card-body">${body}</div></section>`;
+  `<section class="card"><div class="card-head"><div><h2>${title}</h2><p>${subtitle}</p></div>${extra}</div><div class="card-body">${body}</div></section>`;
 export const kpi = (title, value, note, ico = 'overview', unit = '') =>
   `<div class="card kpi"><div class="kpi-top">${title}${icon(ico)}</div><div class="kpi-value">${value}<small>${unit}</small></div><div class="kpi-note">${note}</div></div>`;
 export const notice = (text) => `<div class="notice">${icon('info')}<div>${text}</div></div>`;

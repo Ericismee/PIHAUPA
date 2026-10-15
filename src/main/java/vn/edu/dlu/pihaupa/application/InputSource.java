@@ -25,7 +25,7 @@ public interface InputSource {
 
     /** Kịch bản kích thước: lấy prefix theo thứ tự gốc, chia lại 80/10/10. Vẫn đọc và kiểm tra toàn tệp. */
     static InputSource fraction(InputSource original, int percent) {
-        if (!java.util.Set.of(25,50,75,100).contains(percent)) throw new IllegalArgumentException("Kích thước cần là 25, 50, 75 hoặc 100%.");
+        if (!java.util.Set.of(20,25,40,50,60,75,80,100).contains(percent)) throw new IllegalArgumentException("Kích thước cần là 20, 25, 40, 50, 60, 75, 80 hoặc 100%.");
         if(percent==100)return original;
         return new InputSource() {
             public String name(){return original.name();}
@@ -50,6 +50,40 @@ public interface InputSource {
         };
     }
     default int sizePercent(){return 100;}
+
+    default int insertionSteps(){return 0;}
+    default double originalRatio(){return 0;}
+    /** Kịch bản Fig.8–9: OR ban đầu và 9 lần chèn; không đổi ví dụ Tables 2–3 mặc định. */
+    static InputSource insertion(InputSource original,int steps,double ratio) {
+        if(steps==0)return original;
+        if(steps!=9 || !(ratio>0 && ratio<1))throw new IllegalArgumentException("Kịch bản chèn cần 9 lần và 0 < OR < 1.");
+        return new InputSource(){
+            public String name(){return original.name();}
+            public String kind(){return "insertion-experiment";}
+            public String format(){return original.format();}
+            public Path file(){return original.file();}
+            public String rawSha256(){return original.rawSha256();}
+            public int sizePercent(){return original.sizePercent();}
+            public int insertionSteps(){return steps;}
+            public double originalRatio(){return ratio;}
+            public void cleanup()throws IOException{original.cleanup();}
+            public InputData read(double su,double sl,Consumer<String> progress)throws IOException{
+                InputData input=original.read(su,sl,progress);
+                var rows=input.batches().stream().flatMap(b->b.transactions().stream()).toList();
+                int first=(int)Math.ceil(rows.size()*ratio);
+                if(first<1 || rows.size()-first<steps)throw new IllegalArgumentException("Không đủ giao dịch cho 9 lần chèn. Giảm OR hoặc dùng chia batch mặc định.");
+                var batches=new java.util.ArrayList<Batch>();
+                batches.add(new Batch("DB0",java.util.List.copyOf(rows.subList(0,first))));
+                int from=first;
+                for(int i=1;i<=steps;i++){
+                    int to=first+(int)Math.ceil((rows.size()-first)*(double)i/steps);
+                    batches.add(new Batch("DB"+i,java.util.List.copyOf(rows.subList(from,to))));from=to;
+                }
+                progress.accept("Kịch bản chèn: OR="+(100.*first/rows.size())+"% · 9 lần chèn đến 100%.");
+                return new InputData(su,sl,input.externalUtilities(),java.util.List.copyOf(batches));
+            }
+        };
+    }
 
     static InputSource paper() {
         return new InputSource() {

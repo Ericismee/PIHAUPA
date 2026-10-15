@@ -19,6 +19,9 @@ public final class ResourceMonitor implements AutoCloseable {
         m.put("heapUsedMiB", (r.totalMemory()-r.freeMemory())/1048576.);
         m.put("heapCommittedMiB", r.totalMemory()/1048576.);
         if (ManagementFactory.getOperatingSystemMXBean() instanceof com.sun.management.OperatingSystemMXBean os) {
+            double processCpu=os.getProcessCpuLoad(), systemCpu=os.getCpuLoad();
+            m.put("processCpuPercent",processCpu<0?null:processCpu*100);
+            m.put("systemCpuPercent",systemCpu<0?null:systemCpu*100);
             m.put("systemTotalMiB", os.getTotalMemorySize()/1048576.);
             m.put("systemUsedMiB", (os.getTotalMemorySize()-os.getFreeMemorySize())/1048576.);
         }
@@ -48,7 +51,7 @@ public final class ResourceMonitor implements AutoCloseable {
         Map<String,Object> m=new LinkedHashMap<>();
         m.put("intervalMs",1000); m.put("scope","JVM server và RAM toàn máy; không gồm JVM con Original/Tight; có overhead lấy mẫu.");
         m.put("samples",List.copyOf(samples));
-        for(String key:List.of("heapUsedMiB","processResidentMiB","systemUsedMiB"))
+        for(String key:List.of("heapUsedMiB","processResidentMiB","systemUsedMiB","processCpuPercent","systemCpuPercent"))
             m.put(key+"Peak",samples.stream().map(s->s.get(key)).filter(Number.class::isInstance).map(Number.class::cast).mapToDouble(Number::doubleValue).max().stream().boxed().findFirst().orElse(null));
         return m;
     }

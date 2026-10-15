@@ -73,6 +73,7 @@ public final class LabServer {
                 } else throw new IllegalArgumentException("Nguồn dữ liệu không hợp lệ.");
                 try {
                     source=InputSource.fraction(source,Integer.parseInt(q.getOrDefault("sizePercent","100")));
+                    source=InputSource.insertion(source,Integer.parseInt(q.getOrDefault("insertions","0")),Double.parseDouble(q.getOrDefault("originalRatio","0.82")));
                     var job=service.submit(source,su,sl,Boolean.parseBoolean(q.getOrDefault("compare","false")),Integer.parseInt(q.getOrDefault("repeats","1")));
                     send(x,202,"application/json",job.status());
                 } catch (RuntimeException e) { source.cleanup(); throw e; }
