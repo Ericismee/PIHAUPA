@@ -199,6 +199,7 @@ public final class ArchiveDatasetReader {
             List<Transaction> transactions, Consumer<String> progress) throws IOException {
         String line;
         while ((line = reader.readLine()) != null) {
+            if(Thread.currentThread().isInterrupted())throw new java.util.concurrent.CancellationException("Đã hủy đọc dữ liệu.");
             if (line.isBlank()) continue;
             long row = ++audit.rows;
             String[] sections = line.split(":", -1);
@@ -239,6 +240,7 @@ public final class ArchiveDatasetReader {
     private static void readInvestments(BufferedReader reader, MutableAudit audit) throws IOException {
         String line;
         while ((line = reader.readLine()) != null) {
+            if(Thread.currentThread().isInterrupted())throw new java.util.concurrent.CancellationException("Đã hủy đọc dữ liệu.");
             line = line.trim();
             if (line.isEmpty() || line.startsWith("ItemID") || line.startsWith("=")) continue;
             String[] columns = line.split("\\s+");

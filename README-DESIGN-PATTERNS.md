@@ -56,7 +56,7 @@ Strategy là mẫu hành vi, đóng gói các cách thực hiện một nhiệm 
 ### Code áp dụng
 
 - [InputSource — contract Strategy](src/main/java/vn/edu/dlu/pihaupa/application/InputSource.java#L17)
-- [AnalysisService.submit — Context và Facade](src/main/java/vn/edu/dlu/pihaupa/application/AnalysisService.java#L22)
+- [AnalysisService.submit — Context và Facade](src/main/java/vn/edu/dlu/pihaupa/application/AnalysisService.java#L23)
 
 Các vai trò trong dự án:
 
@@ -99,7 +99,7 @@ Facade là mẫu cấu trúc cung cấp điểm vào đơn giản cho subsystem 
 
 ### Code áp dụng
 
-- [AnalysisService.submit — Context và Facade](src/main/java/vn/edu/dlu/pihaupa/application/AnalysisService.java#L22)
+- [AnalysisService.submit — Context và Facade](src/main/java/vn/edu/dlu/pihaupa/application/AnalysisService.java#L23)
 - [AnalysisReport.run — điều phối các batch](src/main/java/piHAUPA/AnalysisReport.java#L49)
 - [ReportArchive.analysis — xuất từ kết quả đã có](src/main/java/vn/edu/dlu/pihaupa/application/ReportArchive.java#L19)
 
@@ -214,9 +214,9 @@ Skeleton Screen là **UI/UX design pattern** dùng placeholder mô phỏng vùng
 
 ### Code áp dụng
 
-- [app.js — skeleton cho lượt phân tích đầu](src/main/resources/static/app.js#L135)
-- [app.js — skeleton kiểm chứng](src/main/resources/static/app.js#L257)
-- [app.js — skeleton danh mục test](src/main/resources/static/app.js#L271)
+- [app.js — skeleton cho lượt phân tích đầu](src/main/resources/static/app.js#L168)
+- [app.js — skeleton kiểm chứng](src/main/resources/static/app.js#L342)
+- [app.js — skeleton danh mục test](src/main/resources/static/app.js#L356)
 - [styles.css — khối placeholder](src/main/resources/static/styles.css#L5)
 
 Đoạn tạo bốn khối chờ khi phân tích lần đầu:
@@ -294,3 +294,12 @@ rg -n "DESIGN PATTERN|UI DESIGN PATTERN" src/main
 ```
 
 Các comment mô tả **pattern, trách nhiệm, lợi ích và giới hạn** ngay tại code áp dụng. Tham chiếu `#L...` khớp phiên bản hiện tại; khi thêm/xóa dòng source cần cập nhật lại số dòng trong tài liệu.
+
+
+## 11. Cập nhật luồng thực nghiệm
+
+Frontend tách thành `api.js`, `ui-components.js`, `report-ui.js`, `notifications.js` và `charts.js`; `app.js` điều phối các view. Skeleton vẫn nằm trong handler/view tải dữ liệu của app; CSS giữ vai trò placeholder.
+
+`AnalysisService` bổ sung hủy hợp tác, đo lặp và `RunStore` lưu hồ sơ trên máy. `ExperimentProfile` ghi SHA-256 và môi trường. `SmallDataOracle` kiểm tra độc lập dữ liệu nhỏ. `IsolatedBenchmark` chạy mỗi chính sách trong JVM con riêng, tuần tự. Các lớp này hỗ trợ tái lập phép đo và tính đúng; không làm thay đổi công thức PIHAUPA hoặc tự chứng minh tăng tốc.
+
+Kết quả chính dùng median một số lẻ lượt (1/3/5); 3/5 có warm-up. So sánh heap đã tách JVM theo chính sách nhưng vẫn dùng heap quan sát, không phải RSS. Hồ sơ hoàn tất lưu ở `results/runs`, có thể mở lại khi cache/job ID đã hết hạn. Hủy trước công bố không lưu kết quả dở dang.

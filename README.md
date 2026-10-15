@@ -94,6 +94,8 @@ Các mục riêng:
 
 Sidebar có thể thu gọn còn icon; tooltip và tên truy cập vẫn giữ. Trạng thái thu gọn được lưu trong trình duyệt. Mọi biểu đồ SVG trên Web có nút **Phóng to**, nhãn X/Y, đơn vị và bảng số liệu. Nhãn dài được giãn ở biểu đồ nhỏ; popup cho phép xem đầy đủ các mốc bằng cuộn ngang.
 
+**Hồ sơ thực nghiệm** lưu các lượt hoàn tất trên máy trong `results/runs` (hoặc `PIHAUPA_RUN_ROOT`), có thể mở lại sau reload/restart và tải ZIP. Dữ liệu lưu cục bộ có preview tối đa 30 giao dịch; thư mục được Git ignore.
+
 Góc **Local workspace** có lịch sử thông báo trong phiên trang: bắt đầu, đọc hoàn tất, khai phá, hoàn tất, lỗi, kiểm thử và chuẩn bị tải tệp. Thông báo này không phải log lưu bền trên server. Lượt rất nhanh có thể hoàn thành giữa hai lần polling; giao diện không cố tình kéo dài thời gian để minh họa tiến độ.
 
 ## 4. Dữ liệu đầu vào
@@ -276,7 +278,10 @@ Xuất sử dụng kết quả đã hoàn tất, không mining lại.
 - `upper-bounds.csv`: AUUB item cùng ngưỡng trên/dưới.
 - `measurements.csv`: import, thuật toán, CPU luồng, heap quan sát.
 - `report.json`: kết quả, cấu hình, preview tối đa 30 giao dịch và comparison nếu có.
-- `comparison.csv`: chỉ xuất nếu đã bật đối chiếu Original/Tight.
+- `comparison.csv`: từng lượt Original/Tight trong JVM riêng, chỉ có nếu bật đối chiếu.
+- `manifest.json`: SHA-256, định dạng, ngưỡng, batch, JDK/OS/heap và cấu hình đo.
+- `verification.json`: phạm vi/kết quả oracle độc lập.
+- `timing-samples.csv`: thời gian từng lượt đo Tight.
 - `README.txt`: mô tả các tệp và giới hạn số đo.
 
 Có thể tải báo cáo CSV/TXT riêng. ZIP không nhân bản raw dataset lớn và không phải bản sao lưu đầy đủ dữ liệu đầu vào.
@@ -291,8 +296,10 @@ Có thể tải báo cáo CSV/TXT riêng. ZIP không nhân bản raw dataset l�
 - Import được đo riêng; tổng thời gian trạng thái có thể gồm chờ/đối chiếu/tổng hợp nên không nhất thiết bằng import + thuật toán.
 - CPU là thời gian CPU của luồng thực thi, không phải phần trăm CPU toàn máy. Nếu JVM không hỗ trợ thì số đo không có.
 - Heap dùng MiB (`bytes / 1,048,576`), lấy mẫu trong JVM chung; không phải RSS hoặc peak tuyệt đối. GC, các kết quả giữ trong bộ nhớ và thứ tự lượt chạy ảnh hưởng phép đo.
-- Comparison dùng warm-up và median 3 lượt cho dữ liệu nhỏ (≤1.000 giao dịch), một lượt cho dữ liệu lớn; không được suy ra ít re-scan luôn nhanh hơn.
-- Một phép phân tích hoặc kiểm thử chạy tại một thời điểm. Server giữ tối đa 8 job; lịch sử Web tối đa 8 kết quả trong phiên trang, mất khi reload. Không có database lưu bền.
+- Chọn 1, 3 hoặc 5 lượt đo; 3/5 lượt có 1 warm-up. Báo cáo chính lấy lượt có wall time median và lưu min–max/các mẫu đo. CPU là tổng của warm-up và các lượt trong JVM chính.
+- Original/Tight chạy mỗi chính sách trong JVM con riêng với cùng số lượt. Heap vẫn là sampled JVM heap, không phải RSS. Hai JVM con chạy tuần tự; server và một JVM con có thể cùng sử dụng bộ nhớ. Không suy ra ít re-scan luôn nhanh hơn.
+- Một phép phân tích hoặc kiểm thử chạy tại một thời điểm. Cache giữ tối đa 8 job, lịch sử phiên trang tối đa 8 kết quả. Hồ sơ hoàn tất được lưu trên disk; trang Hồ sơ hiển thị 20 lượt gần nhất. Chưa có chính sách tự dọn hồ sơ cũ.
+- Nút Hủy gửi yêu cầu ngắt hợp tác trong reader/miner/oracle và dừng JVM con nếu có. Job CANCELLED không xuất/lưu kết quả dở dang. Khi bắt đầu ghi hồ sơ hoàn tất, nút hủy bị khóa để giữ tính nhất quán.
 - Đọc tệp theo dòng không có nghĩa miner hoạt động với bộ nhớ O(1): giao dịch, PI-list và cây mẫu vẫn cần bộ nhớ.
 
 ## 10. Cấu trúc source và API
@@ -305,7 +312,14 @@ src/main/java/
     support/                       # JSON, lỗi có cấu trúc
     web/LabServer.java             # HTTP controller, static files
 src/main/resources/
-  static/                          # index.html, styles.css, app.js, charts.js
+  static/                          # HTML/CSS và các module JS
+    app.js                         # điều phối view/job
+    api.js                         # Fetch, timeout, error contract
+    ui-components.js               # bảng, card, icon dùng chung
+    report-ui.js                   # kết luận, mức kiểm chứng, manifest
+    notifications.js               # toast và lịch sử trạng thái
+    charts.js                      # SVG, bảng số liệu, popup
+    report.css                     # bố cục báo cáo tiết chế
   dataset-profiles.properties       # preset có đối chứng
 src/test/java/piHAUPA/              # test main/assertions và kiểm chứng dữ liệu
 scripts/                           # build, môi trường Java, kiểm tra HTTP
@@ -322,13 +336,17 @@ API chính (localhost):
 - `GET /api/testcases`: đặc tả/kết quả gần nhất.
 - `POST /api/testcases/run`: chạy 20 case.
 - `GET /api/testcases/export`: tải ZIP kiểm thử.
-- `POST /api/jobs?kind=paper&su=0.23&sl=0.10&compare=false`: tạo job.
+- `POST /api/jobs?kind=paper&su=0.23&sl=0.10&compare=false&repeats=1`: tạo job (repeats: 1/3/5).
 - `kind=catalog&dataset=<id>`: dùng ID từ catalog; `kind=upload&format=transactions`: gửi body TXT, hoặc `format=quantitative`.
 - `GET /api/jobs/<id>`: trạng thái, nhật ký, số đo trực tiếp.
+- `POST /api/jobs/<id>/cancel`: hủy hợp tác lượt đang chạy.
+- `GET /api/runs`: 20 hồ sơ gần nhất.
+- `GET /api/runs/<id>`: mở kết quả đã lưu.
+- `GET /api/runs/<id>/export`: ZIP đã lưu, không mining lại.
 - `GET /api/jobs/<id>/result`: báo cáo khi hoàn tất.
 - `GET /api/jobs/<id>/export?format=csv|txt|zip`: xuất kết quả.
 
-Job có các phase `READING`, `MINING`, `REPORTING`, `COMPARING` (tùy chọn), `COMPLETED`, `FAILED`. UI có thêm trạng thái gửi request/kết nối lại. API kiểm tra Origin của yêu cầu trình duyệt; ID catalog không nhận đường dẫn tùy ý.
+Job có các phase `READING`, `MINING`, `REPORTING`, `COMPARING` (tùy chọn), `COMPLETED`, `CANCELLING`, `CANCELLED`, `FAILED`. UI có thêm trạng thái gửi request/kết nối lại. API kiểm tra Origin của yêu cầu trình duyệt; ID catalog không nhận đường dẫn tùy ý.
 
 ## 11. Xử lý sự cố
 
@@ -345,3 +363,24 @@ Job có các phase `READING`, `MINING`, `REPORTING`, `COMPARING` (tùy chọn), 
 ## 12. Tài liệu liên quan
 
 [Tài liệu design pattern và kiến trúc](README-DESIGN-PATTERNS.md) mô tả lớp cụ thể, lý do áp dụng, luồng xử lý và giới hạn. Các công thức có thể tra trực tiếp trong mục Công thức & thuật ngữ của ứng dụng. Báo cáo thực nghiệm nên đính kèm cấu hình ngưỡng, dataset, JDK, heap, cách đo và file xuất của chính lượt chạy đó.
+
+
+## 13. Hồ sơ và mức kiểm chứng
+
+Kết luận nằm đầu báo cáo; batch và phép tính được bung khi cần. Ba nhãn kiểm chứng phân biệt rõ:
+
+- **Ví dụ bài báo:** áp dụng cho đúng mẫu 9 giao dịch và ngưỡng 0.23/0.10; DB2 là giá trị tính từ dữ liệu mẫu, Table 5 in trực tiếp kết quả DB1.
+- **Original/Tight:** so tập HAUP và AU giữa hai chính sách của cùng implementation, không phải xác nhận độc lập của tác giả.
+- **Oracle độc lập:** vét cạn các tập con giao dịch, không dùng PI-list/pruning; tự chạy khi ≤12 item và ≤1.000 giao dịch. Ngoài giới hạn ghi chưa đối chứng; không gán ĐẠT.
+
+Chạy kiểm tra luồng thực nghiệm:
+
+```powershell
+python scripts/verify-experiments.py --url http://localhost:8016
+```
+
+Bộ kiểm tra bao gồm phép đo lặp, median/range, JVM riêng, hủy và chạy lại, hồ sơ/ZIP và NewChess nếu có. `scripts/check-ui.cjs` kiểm tra module render bằng JSON tạo trong `tmp` bởi script tích hợp; đây không thay thế kiểm tra hình ảnh trong trình duyệt.
+
+SHA-256 dataset lấy từ byte file gốc; mẫu nhúng dùng biểu diễn chuẩn hóa `canonical-input-sha256-v1`. Ngưỡng lưu riêng, không trộn vào dataset hash. Cấu hình trong hồ sơ giúp chạy lại, nhưng hồ sơ không chứa toàn bộ raw dataset. Cần giữ file gốc khớp hash.
+
+Build bằng `scripts/build.ps1` ghi revision Git và trạng thái working tree vào manifest. Build bằng công cụ không tạo build-info sẽ ghi unavailable/unknown; không gán giả một commit cho phép đo.

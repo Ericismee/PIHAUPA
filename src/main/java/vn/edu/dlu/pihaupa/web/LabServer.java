@@ -48,7 +48,7 @@ public final class LabServer {
             if (path.equals("/api/datasets") && method.equals("GET")) {
                 send(x,200,"application/json",Json.encode(catalog.list()));
             } else if (path.equals("/api/verify") && method.equals("GET")) {
-                send(x,200,"application/json",Json.encode(PaperVerification.run()));
+                send(x,200,"application/json",Json.encode(service.verifyPaper()));
             } else if(path.equals("/api/testcases") && method.equals("GET")) {
                 send(x,200,"application/json",Json.encode(TestCaseRunner.snapshot()));
             } else if(path.equals("/api/testcases/export") && method.equals("GET")) {
@@ -70,9 +70,17 @@ public final class LabServer {
                     source=InputSource.upload(temporary,q.getOrDefault("name","transactions.txt"), !"quantitative".equals(q.get("format")));
                 } else throw new IllegalArgumentException("Nguồn dữ liệu không hợp lệ.");
                 try {
-                    var job=service.submit(source,su,sl,Boolean.parseBoolean(q.getOrDefault("compare","false")));
+                    var job=service.submit(source,su,sl,Boolean.parseBoolean(q.getOrDefault("compare","false")),Integer.parseInt(q.getOrDefault("repeats","1")));
                     send(x,202,"application/json",job.status());
                 } catch (RuntimeException e) { source.cleanup(); throw e; }
+            } else if(path.startsWith("/api/jobs/") && path.endsWith("/cancel") && method.equals("POST")) {
+                String id=path.substring("/api/jobs/".length(),path.length()-"/cancel".length());send(x,202,"application/json",service.cancel(id).status());
+            } else if(path.equals("/api/runs") && method.equals("GET")) {send(x,200,"application/json",service.store().list());
+            } else if(path.startsWith("/api/runs/") && method.equals("GET")) {
+                String[] parts=path.substring("/api/runs/".length()).split("/");
+                if(parts.length==1)send(x,200,"application/json",service.store().result(parts[0]));
+                else if(parts.length==2&&parts[1].equals("export")){x.getResponseHeaders().set("Content-Disposition","attachment; filename=\"pihaupa-run.zip\"");sendBytes(x,"application/zip",service.store().archive(parts[0]));}
+                else send(x,404,"application/json","{}");
             } else if (path.startsWith("/api/jobs/") && method.equals("GET")) {
                 String[] parts=path.substring("/api/jobs/".length()).split("/");
                 var job=service.get(parts[0]);
@@ -101,7 +109,7 @@ public final class LabServer {
     private void staticFile(HttpExchange x) throws IOException {
         String path=x.getRequestURI().getPath();
         if (path.equals("/")) path="/index.html";
-        if (!Set.of("/index.html","/styles.css","/app.js","/charts.js").contains(path) || !x.getRequestMethod().equals("GET")) {
+        if (!Set.of("/index.html","/styles.css","/app.js","/charts.js","/api.js","/ui-components.js","/report-ui.js","/notifications.js","/report.css").contains(path) || !x.getRequestMethod().equals("GET")) {
             send(x,404,"text/plain","Not found"); return;
         }
         try (InputStream in=LabServer.class.getResourceAsStream("/static"+path)) {

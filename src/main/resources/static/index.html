@@ -1,56 +1,99 @@
 <!doctype html>
 <html lang="vi">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Phòng thực nghiệm PIHAUPA — khai phá mẫu tiện ích trung bình trên dữ liệu tăng dần"><title>PIHAUPA · Research Lab</title><link rel="stylesheet" href="/styles.css"><script type="module" src="/app.js"></script></head>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Phòng thực nghiệm PIHAUPA — khai phá mẫu tiện ích trung bình trên dữ liệu tăng dần">
+    <title>PIHAUPA · Research Lab</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/report.css">
+    <script type="module" src="/app.js"></script>
+</head>
+
 <body>
-<a class="skip" href="#main">Đến nội dung chính</a>
-<aside class="sidebar" id="sidebar">
-  <div class="sidebar-heading"><a class="brand" href="#overview"><span class="brand-mark" aria-hidden="true">P</span><span>PIHAUPA</span></a><button id="sidebar-hide" class="sidebar-control" type="button" aria-label="Ẩn thanh điều hướng" title="Ẩn thanh điều hướng">‹</button></div>
-  <div class="workspace"><div>Nhóm 3 · Java nâng cao</div></div>
-  <p class="nav-label">PHÂN TÍCH</p>
-  <nav aria-label="Điều hướng chính">
-    <a href="#overview" data-page="overview"><span data-icon="overview"></span>Phân tích PIHAUPA</a>
-  </nav>
-  <p class="nav-label">THỰC NGHIỆM</p>
-  <nav aria-label="Thực nghiệm và tài liệu">
-    <a href="#measurements" data-page="measurements"><span data-icon="measurements"></span>Đo lường & biểu đồ</a>
-    <a href="#datasets" data-page="datasets"><span data-icon="datasets"></span>Bộ dữ liệu</a>
-    <a href="#testcases" data-page="testcases"><span data-icon="verification"></span>Test case & kiểm thử</a>
-    <a href="#verification" data-page="verification"><span data-icon="verification"></span>Kiểm chứng bài báo</a>
-    <a href="#glossary" data-page="glossary"><span data-icon="glossary"></span>Công thức & thuật ngữ</a>
-  </nav>
-  <div class="sidebar-note"><span class="status-dot"></span> Java computation engine<small>PIHAUP-List · Tight re-scan</small></div>
-  <a class="paper-link" href="https://doi.org/10.1186/s40537-025-01352-x" target="_blank" rel="noreferrer"><span data-icon="glossary"></span><span>Bài báo tham chiếu<small>Kim et al. · Journal of Big Data ↗</small></span></a>
-</aside>
-<div class="shell">
-  <header class="topbar"><div class="topbar-navigation"><div><span class="breadcrumb">Nhóm 3 · Java nâng cao</span><span class="crumb-sep">/</span><strong id="breadcrumb">Phân tích PIHAUPA</strong></div></div><div class="notification-anchor"><button id="notifications-toggle" class="local-badge" type="button" aria-expanded="false" aria-controls="notifications-panel"><span class="status-dot"></span><span id="workspace-state">Local workspace</span><span id="notification-count" class="notification-count" hidden>0</span></button><section id="notifications-panel" class="notifications-panel" aria-label="Thông báo xử lý" hidden><div class="notification-head"><strong>Thông báo</strong><button id="notifications-clear" type="button">Xóa lịch sử</button></div><ol id="notification-list"><li class="notification-empty">Chưa có thông báo.</li></ol></section></div></header>
-  <main id="main" tabindex="-1">
-    <div class="page-heading"><div><div class="eyebrow">INCREMENTAL PATTERN MINING</div><h1 id="page-title">Phân tích PIHAUPA</h1><p id="page-description">Từ dữ liệu giao dịch đến mẫu tiện ích trung bình cao.</p></div><div class="heading-actions"><button class="button" id="export-zip" disabled>Gói báo cáo ZIP</button><button class="button" id="export" disabled><span data-icon="download"></span>Xuất báo cáo CSV</button><button class="button" id="export-txt" disabled>TXT</button></div></div>
-    <section id="run-panel" class="run-panel compact-run" aria-labelledby="run-title">
-      <div class="run-intro"><h2 id="run-title">Cấu hình phân tích</h2><span id="source-kind" class="tag blue">Dữ liệu mẫu bài báo</span></div>
-      <form id="run-form" novalidate>
-        <div class="field source-field"><label for="source">Dữ liệu</label><select id="source"><option value="paper">Bài báo gốc · Tables 2–3</option><option value="upload">Tải tệp TXT lên…</option></select></div>
-        <div class="field"><label for="su">Sᵤ <small id="su-percent">23%</small></label><input id="su" aria-label="Ngưỡng trên Su" type="number" min="0.000001" max="1" step="any" value="0.23" required></div>
-        <div class="field"><label for="sl">Sₗ <small id="sl-percent">10%</small></label><input id="sl" aria-label="Ngưỡng dưới Sl" type="number" min="0.000001" max="1" step="any" value="0.10" required></div>
-        <button class="button primary" id="run" type="submit"><span data-icon="play"></span>Chạy phân tích</button>
-        <div id="upload-fields" class="upload-fields" hidden><div class="field"><label for="file">Tệp TXT</label><input id="file" type="file" accept=".txt"></div><div class="field"><label for="format">Định dạng TXT</label><select id="format"><option value="transactions">items:TU:itemUtilities</option><option value="quantitative">Định lượng · external + batch</option></select></div></div>
-        <details id="run-options" class="run-options"><summary>Tùy chọn & giải thích</summary><div class="options-body">
-          <p id="run-subtitle">Phân tích dữ liệu mẫu từ bài báo gốc.</p>
-          <p id="source-hint">9 giao dịch · 6 item · 3 batch theo bài báo</p>
-          <p id="preset-hint">Ngưỡng ví dụ bài báo · 0,23 = 23%.</p>
-          <label class="check"><input id="compare" type="checkbox">Đối chiếu Original / Tight · chạy thêm lượt đo</label>
-          <div class="metric-details"><span id="live-read">Đọc: —</span><span id="live-algorithm">Thuật toán: —</span><span id="live-heap-detail">Đỉnh heap lấy mẫu: —</span></div>
-          <div id="phase-trail" class="phase-trail" hidden></div>
-          <div id="status" class="run-status" role="status" aria-live="polite" hidden></div>
-          <details id="progress-panel" class="progress" hidden><summary>Nhật ký xử lý</summary><pre id="progress-log"></pre></details>
-        </div></details>
-      </form>
-      <p id="pending-run" class="pending-note" hidden></p>
-      <div id="live-metrics" class="live-metrics" role="status" aria-live="polite"><span id="live-phase">Chưa chạy</span><span id="live-total">Tổng: —</span><span id="live-heap">Heap: —</span></div>
-    </section>
-    <div id="status-toast" class="status-toast" role="status" aria-live="polite" hidden></div>
-    <div id="error" class="alert error" role="alert" hidden></div>
-    <div id="content"></div>
-    <footer class="footer"><span>PIHAUPA Research Lab <span class="footer-dot">·</span> Java 17+</span><span>Số liệu thực tế từ lõi Java · Không dùng dữ liệu biểu đồ giả</span></footer>
-  </main>
-</div>
-</body></html>
+    <a class="skip" href="#main">Đến nội dung chính</a>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-heading"><a class="brand" href="#overview"><span class="brand-mark" aria-hidden="true">P</span><span>PIHAUPA</span></a><button id="sidebar-hide" class="sidebar-control" type="button" aria-label="Ẩn thanh điều hướng" title="Ẩn thanh điều hướng">‹</button></div>
+        <div class="workspace">
+            <div>Nhóm 3 · Java nâng cao</div>
+        </div>
+        <p class="nav-label">PHÂN TÍCH</p>
+        <nav aria-label="Điều hướng chính">
+            <a href="#overview" data-page="overview"><span data-icon="overview"></span>Phân tích PIHAUPA</a>
+        </nav>
+        <p class="nav-label">THỰC NGHIỆM</p>
+        <nav aria-label="Thực nghiệm và tài liệu">
+            <a href="#measurements" data-page="measurements"><span data-icon="measurements"></span>Đo lường & biểu đồ</a>
+            <a href="#datasets" data-page="datasets"><span data-icon="datasets"></span>Bộ dữ liệu</a>
+            <a href="#runs" data-page="runs"><span data-icon="clock"></span>Hồ sơ thực nghiệm</a>
+            <a href="#testcases" data-page="testcases"><span data-icon="verification"></span>Test case & kiểm thử</a>
+            <a href="#verification" data-page="verification"><span data-icon="verification"></span>Kiểm chứng bài báo</a>
+            <a href="#glossary" data-page="glossary"><span data-icon="glossary"></span>Công thức & thuật ngữ</a>
+        </nav>
+        <div class="sidebar-note"><span class="status-dot"></span> Java computation engine<small>PIHAUP-List · Tight re-scan</small></div>
+        <a class="paper-link" href="https://doi.org/10.1186/s40537-025-01352-x" target="_blank" rel="noreferrer"><span data-icon="glossary"></span><span>Bài báo tham chiếu<small>Kim et al. · Journal of Big Data ↗</small></span></a>
+    </aside>
+    <div class="shell">
+        <header class="topbar">
+            <div class="topbar-navigation">
+                <div><span class="breadcrumb">Nhóm 3 · Java nâng cao</span><span class="crumb-sep">/</span><strong id="breadcrumb">Phân tích PIHAUPA</strong></div>
+            </div>
+            <div class="notification-anchor"><button id="notifications-toggle" class="local-badge" type="button" aria-expanded="false" aria-controls="notifications-panel"><span class="status-dot"></span><span id="workspace-state">Local workspace</span><span id="notification-count" class="notification-count" hidden>0</span></button>
+                <section id="notifications-panel" class="notifications-panel" aria-label="Thông báo xử lý" hidden>
+                    <div class="notification-head"><strong>Thông báo</strong><button id="notifications-clear" type="button">Xóa lịch sử</button></div>
+                    <ol id="notification-list">
+                        <li class="notification-empty">Chưa có thông báo.</li>
+                    </ol>
+                </section>
+            </div>
+        </header>
+        <main id="main" tabindex="-1">
+            <div class="page-heading">
+                <div>
+                    <div class="eyebrow">INCREMENTAL PATTERN MINING</div>
+                    <h1 id="page-title">Phân tích PIHAUPA</h1>
+                    <p id="page-description">Từ dữ liệu giao dịch đến mẫu tiện ích trung bình cao.</p>
+                </div>
+                <div class="heading-actions"><button class="button" id="export-zip" disabled>Gói báo cáo ZIP</button><button class="button" id="export" disabled><span data-icon="download"></span>Xuất báo cáo CSV</button><button class="button" id="export-txt" disabled>TXT</button></div>
+            </div>
+            <section id="run-panel" class="run-panel compact-run" aria-labelledby="run-title">
+                <div class="run-intro">
+                    <h2 id="run-title">Cấu hình phân tích</h2><span id="source-kind" class="tag blue">Dữ liệu mẫu bài báo</span></div>
+                <form id="run-form" novalidate>
+                    <div class="field source-field"><label for="source">Dữ liệu</label><select id="source"><option value="paper">Bài báo gốc · Tables 2–3</option><option value="upload">Tải tệp TXT lên…</option></select></div>
+                    <div class="field"><label for="su">Sᵤ <small id="su-percent">23%</small></label><input id="su" aria-label="Ngưỡng trên Su" type="number" min="0.000001" max="1" step="any" value="0.23" required></div>
+                    <div class="field"><label for="sl">Sₗ <small id="sl-percent">10%</small></label><input id="sl" aria-label="Ngưỡng dưới Sl" type="number" min="0.000001" max="1" step="any" value="0.10" required></div>
+                    <button class="button primary" id="run" type="submit"><span data-icon="play"></span>Chạy phân tích</button><button type="button" class="button" id="cancel-run" hidden>Hủy lượt chạy</button>
+                    <div id="upload-fields" class="upload-fields" hidden>
+                        <div class="field"><label for="file">Tệp TXT</label><input id="file" type="file" accept=".txt"></div>
+                        <div class="field"><label for="format">Định dạng TXT</label><select id="format"><option value="transactions">items:TU:itemUtilities</option><option value="quantitative">Định lượng · external + batch</option></select></div>
+                    </div>
+                    <details id="run-options" class="run-options">
+                        <summary>Tùy chọn & giải thích</summary>
+                        <div class="options-body">
+                            <p id="run-subtitle">Phân tích dữ liệu mẫu từ bài báo gốc.</p>
+                            <p id="source-hint">9 giao dịch · 6 item · 3 batch theo bài báo</p>
+                            <p id="preset-hint">Ngưỡng ví dụ bài báo · 0,23 = 23%.</p>
+                            <label class="check"><input id="compare" type="checkbox">Đối chiếu Original / Tight · JVM riêng</label>
+                            <label class="repeat-field" for="repeats">Số lượt đo <select id="repeats"><option value="1">1 lượt · chạy nhanh</option><option value="3">3 lượt + 1 warm-up</option><option value="5">5 lượt + 1 warm-up</option></select></label>
+                            <div class="metric-details"><span id="live-read">Đọc: —</span><span id="live-algorithm">Thuật toán: —</span><span id="live-heap-detail">Đỉnh heap lấy mẫu: —</span></div>
+                            <div id="phase-trail" class="phase-trail" hidden></div>
+                            <div id="status" class="run-status" role="status" aria-live="polite" hidden></div>
+                            <details id="progress-panel" class="progress" hidden>
+                                <summary>Nhật ký xử lý</summary><pre id="progress-log"></pre></details>
+                        </div>
+                    </details>
+                </form>
+                <p id="pending-run" class="pending-note" hidden></p>
+                <div id="live-metrics" class="live-metrics" role="status" aria-live="polite"><span id="live-phase">Chưa chạy</span><span id="live-total">Tổng: —</span><span id="live-heap">Heap: —</span></div>
+            </section>
+            <div id="status-toast" class="status-toast" role="status" aria-live="polite" hidden></div>
+            <div id="error" class="alert error" role="alert" hidden></div>
+            <div id="content"></div>
+            <footer class="footer"><span>PIHAUPA Research Lab <span class="footer-dot">·</span> Java 17+</span><span>Số liệu thực tế từ lõi Java · Không dùng dữ liệu biểu đồ giả</span></footer>
+        </main>
+    </div>
+</body>
+
+</html>

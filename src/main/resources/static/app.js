@@ -1,215 +1,287 @@
-import {chart, colors, esc, num} from './charts.js';
+import { chart, colors, esc, num } from './charts.js';
+import { request } from './api.js';
+import { icon, badge, card, kpi, notice, last, action, table, tr } from './ui-components.js';
+import { auEvidence, finalConclusion, verificationBadges, manifestPanel } from './report-ui.js';
+import { notifyStatus } from './notifications.js';
 
-const $=id=>document.getElementById(id);
-function setSidebarHidden(hidden){
-  document.body.classList.toggle('sidebar-hidden',hidden);
-  $('sidebar-hide').setAttribute('aria-expanded',String(!hidden));
-  $('sidebar-hide').setAttribute('aria-label',hidden?'Hiện thanh điều hướng':'Ẩn thanh điều hướng');
-  $('sidebar-hide').textContent=hidden?'›':'‹';
-  try{localStorage.setItem('pihaupa.sidebarHidden',String(hidden));}catch{}
+const $ = id => document.getElementById(id);
+
+function setSidebarHidden(hidden) {
+    document.body.classList.toggle('sidebar-hidden', hidden);
+    $('sidebar-hide').setAttribute('aria-expanded', String(!hidden));
+    $('sidebar-hide').setAttribute('aria-label', hidden ? 'Hiện thanh điều hướng' : 'Ẩn thanh điều hướng');
+    $('sidebar-hide').textContent = hidden ? '›' : '‹';
+    try { localStorage.setItem('pihaupa.sidebarHidden', String(hidden)); } catch {}
 }
-let savedSidebarHidden=false;try{savedSidebarHidden=localStorage.getItem('pihaupa.sidebarHidden')==='true';}catch{}
+let savedSidebarHidden = false;
+try { savedSidebarHidden = localStorage.getItem('pihaupa.sidebarHidden') === 'true'; } catch {}
 setSidebarHidden(savedSidebarHidden);
-$('sidebar-hide').onclick=()=>setSidebarHidden(!document.body.classList.contains('sidebar-hidden'));
+$('sidebar-hide').onclick = () => setSidebarHidden(!document.body.classList.contains('sidebar-hidden'));
 
-const icons={overview:'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',batches:'M8 6h13 M8 12h13 M8 18h13 M3 6h1 M3 12h1 M3 18h1',rescan:'M12 3v6 M5 15v-3h14v3 M5 15v6 M19 15v6 M8 3h8 M2 21h6 M16 21h6',patterns:'M3 5h18v14H3z M3 10h18 M9 10v9 M15 10v9',measurements:'M4 3v18h17 M8 16v-4 M13 16V7 M18 16v-7',datasets:'M20 6c0 2-16 2-16 0s16-2 16 0 M4 6v12c0 3 16 3 16 0V6 M4 12c0 3 16 3 16 0',verification:'M12 3l8 4v5c0 5-8 9-8 9s-8-4-8-9V7z M8 12l3 3 5-6',glossary:'M3 4h7l2 2 2-2h7v15h-7l-2 2-2-2H3z M12 6v15',play:'M8 4l12 8-12 8z',download:'M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5',clock:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18 M12 7v5l3 2',info:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18 M12 11v6 M12 7h.01',arrow:'M4 12h16 M14 6l6 6-6 6'};
-const icon=name=>`<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[name]||icons.overview}"/></svg>`;
-document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));
-document.querySelectorAll('#sidebar nav a').forEach(link=>{const label=link.textContent.trim();link.title=label;link.setAttribute('aria-label',label);for(const node of [...link.childNodes]){if(node.nodeType===Node.TEXT_NODE&&node.textContent.trim()){const span=document.createElement('span');span.className='nav-text';span.textContent=node.textContent;node.replaceWith(span);}}});
-const pages={overview:['Phân tích PIHAUPA','Một báo cáo liền mạch: tổng quan → từng batch và re-scan → kết quả khai phá.'],batches:['Phân tích từng bước','Theo dõi utility, ngưỡng phân loại và tập mẫu qua mỗi batch.'],rescan:['Quyết định re-scan','Giải thích điều kiện Tight bằng số liệu tích lũy từ lần full scan gần nhất.'],patterns:['Kết quả khai phá','Tra cứu các mẫu đang quản lý và tiện ích trung bình thực tế.'],measurements:['Đo lường & biểu đồ','Tách chi phí đọc dữ liệu, thuật toán, CPU luồng và JVM heap.'],datasets:['Bộ dữ liệu thực nghiệm','Đọc trực tiếp transactions.txt; mỗi bộ dữ liệu được phân tích độc lập.'],testcases:['Test case & kiểm thử','Chạy test thật, xem đầu vào, kết quả kỳ vọng và lỗi của từng case.'],verification:['Kiểm chứng bài báo gốc','Đối chiếu dữ liệu Tables 2–3, tập HAUP và hành vi re-scan.'],glossary:['Công thức & thuật ngữ','Các định nghĩa theo Kim et al., Journal of Big Data (2026), 13:13.']};
-const state={page:'overview',current:null,history:[],datasets:[],busy:false,verification:null,testResults:null,testsBusy:false,patternPage:0,patternSearch:'',patternType:'ALL',batchIndex:0};
-let currentJob=null;
-let runPhase='IDLE',lastJobPhase='',toastTimer;
-const runMilestones=new Set();
-const notifications=[];
-function notifyStatus(title,detail='',kind='info'){
-  notifications.unshift({title,detail,kind,time:new Date()});notifications.splice(30);
-  $('notification-list').innerHTML=notifications.map(n=>`<li class="notification-item ${n.kind}"><strong>${esc(n.title)}</strong><p>${esc(n.detail)}</p><time>${esc(n.time.toLocaleTimeString('vi-VN'))}</time></li>`).join('');
-  $('notification-count').hidden=false;$('notification-count').textContent=notifications.length;
-  $('status-toast').innerHTML=`<div><strong>${esc(title)}</strong><p>${esc(detail)}</p></div><button type="button" aria-label="Đóng thông báo">×</button>`;
-  $('status-toast').dataset.kind=kind;$('status-toast').hidden=false;
-  $('status-toast').querySelector('button').onclick=()=>{$('status-toast').hidden=true;};
-  clearTimeout(toastTimer);toastTimer=setTimeout(()=>{$('status-toast').hidden=true;},kind==='error'?10000:4500);
+document.querySelectorAll('[data-icon]').forEach(el => el.innerHTML = icon(el.dataset.icon));
+document.querySelectorAll('#sidebar nav a').forEach(link => { const label = link.textContent.trim();
+    link.title = label;
+    link.setAttribute('aria-label', label); for (const node of[...link.childNodes]) { if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) { const span = document.createElement('span');
+            span.className = 'nav-text';
+            span.textContent = node.textContent;
+            node.replaceWith(span); } } });
+const pages = { overview: ['Phân tích PIHAUPA', 'Một báo cáo liền mạch: tổng quan → từng batch và re-scan → kết quả khai phá.'], batches: ['Phân tích từng bước', 'Theo dõi utility, ngưỡng phân loại và tập mẫu qua mỗi batch.'], rescan: ['Quyết định re-scan', 'Giải thích điều kiện Tight bằng số liệu tích lũy từ lần full scan gần nhất.'], patterns: ['Kết quả khai phá', 'Tra cứu các mẫu đang quản lý và tiện ích trung bình thực tế.'], measurements: ['Đo lường & biểu đồ', 'Tách chi phí đọc dữ liệu, thuật toán, CPU luồng và JVM heap.'], datasets: ['Bộ dữ liệu thực nghiệm', 'Đọc trực tiếp transactions.txt; mỗi bộ dữ liệu được phân tích độc lập.'], testcases: ['Test case & kiểm thử', 'Chạy test thật, xem đầu vào, kết quả kỳ vọng và lỗi của từng case.'], verification: ['Kiểm chứng bài báo gốc', 'Đối chiếu dữ liệu Tables 2–3, tập HAUP và hành vi re-scan.'], runs: ['Hồ sơ thực nghiệm', 'Các lượt hoàn tất đã lưu trên máy; mở lại cấu hình, kết quả và số đo.'], glossary: ['Công thức & thuật ngữ', 'Các định nghĩa theo Kim et al., Journal of Big Data (2026), 13:13.'] };
+const state = { page: 'overview', current: null, history: [], datasets: [], busy: false, verification: null, testResults: null, testsBusy: false, patternPage: 0, patternSearch: '', patternType: 'ALL', batchIndex: 0 };
+let currentJob = null;
+let runPhase = 'IDLE',
+    lastJobPhase = '',
+    toastTimer;
+const runMilestones = new Set();
+const runLabels = { IDLE: 'Chạy phân tích', SUBMITTING: 'Đang gửi dữ liệu…', READING: 'Đang đọc dữ liệu…', MINING: 'Đang khai phá…', COMPARING: 'Đang đối chiếu…', REPORTING: 'Đang dựng báo cáo…', RECONNECTING: 'Đang kết nối lại…', COMPLETED: '✓ Hoàn tất · Chạy lại', FAILED: 'Thử lại phân tích', CANCELLING: 'Đang hủy…', CANCELLED: 'Đã hủy · Chạy lại' };
+
+function setRunPhase(phase) { runPhase = phase;
+    $('run').dataset.phase = phase;
+    $('run').setAttribute('aria-busy', String(state.busy));
+    $('run').innerHTML = (state.busy ? '<span class="run-spinner" aria-hidden="true"></span>' : icon('play')) + (runLabels[phase] || runLabels.IDLE);
+    $('workspace-state').textContent = state.busy ? (runLabels[phase] || 'Đang xử lý…') : phase === 'FAILED' ? 'Có lỗi xử lý' : phase === 'COMPLETED' ? 'Phân tích hoàn tất' : 'Local workspace'; }
+const phases = { READING: 'Đang đọc dữ liệu', MINING: 'Đọc hoàn tất · đang khai phá', COMPARING: 'Khai phá hoàn tất · đang đối chiếu', REPORTING: 'Đang dựng báo cáo', COMPLETED: 'Xử lý hoàn tất', FAILED: 'Xử lý thất bại', CANCELLING: 'Đang hủy an toàn', CANCELLED: 'Đã hủy' };
+
+function showJobStatus(status) {
+    const phase = status.phase === 'COMPLETED' ? 'REPORTING' : status.phase;
+    setRunPhase(phase);
+    if (status.phase !== lastJobPhase) { lastJobPhase = status.phase; if (!['FAILED', 'COMPLETED'].includes(status.phase)) notifyStatus(phases[status.phase] || status.phase, status.source || 'Lõi Java đang xử lý.'); }
+    if (status.importMs != null && !runMilestones.has('read')) { runMilestones.add('read');
+        notifyStatus('Đọc dữ liệu hoàn tất', num(status.importMs) + ' ms.', 'success'); }
+    if (status.algorithmMs != null && status.phase !== 'MINING' && !runMilestones.has('mined')) { runMilestones.add('mined');
+        notifyStatus('Khai phá hoàn tất', num(status.algorithmMs) + ' ms · đang nhận kết quả.', 'success'); }
+    $('cancel-run').disabled = !status.canCancel;
+    $('cancel-run').hidden = status.state !== 'RUNNING';
+    $('live-phase').textContent = phases[status.phase] || status.state;
+    $('live-total').textContent = 'Tổng: ' + num(status.elapsedMs / 1000) + ' s';
+    $('live-read').textContent = 'Đọc: ' + (status.importMs == null ? 'đang xử lý…' : num(status.importMs) + ' ms');
+    $('live-algorithm').textContent = 'Thuật toán: ' + (status.algorithmMs == null ? '—' : num(status.algorithmMs) + ' ms');
+    $('live-heap').textContent = 'Heap: ' + num(status.heapUsedMb, 1) + ' MiB';
+    $('live-heap-detail').textContent = 'Đỉnh heap lấy mẫu: ' + num(status.heapPeakObservedMb, 1) + ' MiB · không phải RSS';
+    $('live-metrics').dataset.phase = status.phase;
+    $('phase-trail').hidden = false;
+    $('phase-trail').innerHTML = [
+        ['Đọc dữ liệu', status.importMs != null],
+        ['Khai phá', status.algorithmMs != null && status.phase !== 'MINING'],
+        ['Báo cáo', status.state === 'COMPLETED']
+    ].map(([label, done]) => badge((done ? '✓ ' : '') + label, done ? 'green' : 'neutral')).join('');
 }
-$('notifications-toggle').onclick=()=>{const open=$('notifications-panel').hidden;$('notifications-panel').hidden=!open;$('notifications-toggle').setAttribute('aria-expanded',String(open));};
-$('notifications-clear').onclick=()=>{notifications.length=0;$('notification-count').hidden=true;$('notification-list').innerHTML='<li class="notification-empty">Chưa có thông báo.</li>';};
-document.addEventListener('click',e=>{if(!e.target.closest('.notification-anchor')){$('notifications-panel').hidden=true;$('notifications-toggle').setAttribute('aria-expanded','false');}});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('notifications-panel').hidden=true;$('notifications-toggle').setAttribute('aria-expanded','false');}});
-const runLabels={IDLE:'Chạy phân tích',SUBMITTING:'Đang gửi dữ liệu…',READING:'Đang đọc dữ liệu…',MINING:'Đang khai phá…',COMPARING:'Đang đối chiếu…',REPORTING:'Đang dựng báo cáo…',RECONNECTING:'Đang kết nối lại…',COMPLETED:'✓ Hoàn tất · Chạy lại',FAILED:'Thử lại phân tích'};
-function setRunPhase(phase){runPhase=phase;$('run').dataset.phase=phase;$('run').setAttribute('aria-busy',String(state.busy));$('run').innerHTML=(state.busy?'<span class="run-spinner" aria-hidden="true"></span>':icon('play'))+(runLabels[phase]||runLabels.IDLE);$('workspace-state').textContent=state.busy?(runLabels[phase]||'Đang xử lý…'):phase==='FAILED'?'Có lỗi xử lý':phase==='COMPLETED'?'Phân tích hoàn tất':'Local workspace';}
-const phases={READING:'Đang đọc dữ liệu',MINING:'Đọc hoàn tất · đang khai phá',COMPARING:'Khai phá hoàn tất · đang đối chiếu',REPORTING:'Đang dựng báo cáo',COMPLETED:'Xử lý hoàn tất',FAILED:'Xử lý thất bại'};
-function showJobStatus(status){
-  const phase=status.phase==='COMPLETED'?'REPORTING':status.phase;setRunPhase(phase);
-  if(status.phase!==lastJobPhase){lastJobPhase=status.phase;if(!['FAILED','COMPLETED'].includes(status.phase))notifyStatus(phases[status.phase]||status.phase,status.source||'Lõi Java đang xử lý.');}
-  if(status.importMs!=null&&!runMilestones.has('read')){runMilestones.add('read');notifyStatus('Đọc dữ liệu hoàn tất',num(status.importMs)+' ms.','success');}
-  if(status.algorithmMs!=null&&status.phase!=='MINING'&&!runMilestones.has('mined')){runMilestones.add('mined');notifyStatus('Khai phá hoàn tất',num(status.algorithmMs)+' ms · đang nhận kết quả.','success');}
-  $('live-phase').textContent=phases[status.phase]||status.state;
-  $('live-total').textContent='Tổng: '+num(status.elapsedMs/1000)+' s';
-  $('live-read').textContent='Đọc: '+(status.importMs==null?'đang xử lý…':num(status.importMs)+' ms');
-  $('live-algorithm').textContent='Thuật toán: '+(status.algorithmMs==null?'—':num(status.algorithmMs)+' ms');
-  $('live-heap').textContent='Heap: '+num(status.heapUsedMb,1)+' MiB';
-  $('live-heap-detail').textContent='Đỉnh heap lấy mẫu: '+num(status.heapPeakObservedMb,1)+' MiB · không phải RSS';
-  $('live-metrics').dataset.phase=status.phase;
-  $('phase-trail').hidden=false;
-  $('phase-trail').innerHTML=[['Đọc dữ liệu',status.importMs!=null],['Khai phá',status.algorithmMs!=null&&status.phase!=='MINING'],['Báo cáo',status.state==='COMPLETED']].map(([label,done])=>badge((done?'✓ ':'')+label,done?'green':'neutral')).join('');
+
+function setError(error) {
+    if (!error) { $('error').hidden = true;
+        $('error').replaceChildren(); return; }
+    const message = typeof error === 'string' ? error : error.message || error.error;
+    const code = error.code || 'VALIDATION',
+        action = error.action || 'Kiểm tra thông tin nhập và chạy lại.';
+    $('error').innerHTML = `<strong>Lỗi ${esc(code)}</strong><p>${esc(message)}</p><p class="error-action">Cách xử lý: ${esc(action)}</p>`;
+    if (!state.busy) setRunPhase('FAILED');
+    $('error').hidden = false;
+    notifyStatus('Lỗi ' + code, message + ' · ' + action, 'error');
 }
-const badge=(text,kind='neutral')=>`<span class="tag ${kind}">${esc(text)}</span>`;
-const card=(title,subtitle,body,extra='')=>`<section class="card"><div class="card-head"><div><h2>${body.includes('class="chart-widget"')?'Biểu đồ · ':''}${title}</h2><p>${subtitle}</p></div>${extra}</div><div class="card-body">${body}</div></section>`;
-const kpi=(title,value,note,ico='overview',unit='')=>`<div class="card kpi"><div class="kpi-top">${title}${icon(ico)}</div><div class="kpi-value">${value}<small>${unit}</small></div><div class="kpi-note">${note}</div></div>`;
-const notice=text=>`<div class="notice">${icon('info')}<div>${text}</div></div>`;
-const last=report=>report.batches.at(-1);
-function action(batch){return batch.index===0?badge('Initial scan','blue'):batch.rescanTriggered?badge('Re-scan','amber'):badge('Cập nhật PT','green');}
-function table(headers,rows,caption=''){
-  // Một quy tắc căn lề cho cả cột: tiêu đề và mọi ô dữ liệu phải khớp nhau.
-  const cells=rows.map(row=>[...row.matchAll(/<td\b([^>]*)>([\s\S]*?)<\/td>/g)]);
-  const numericColumns=headers.map((_,i)=>cells.some(row=>/class="[^"]*\bnumeric\b/.test(row[i]?.[1]||'')));
-  const body=rows.map(row=>{let index=0;return row.replace(/<td\b([^>]*)>/g,(_,attributes)=>{
-    const alignment=numericColumns[index++]?'column-number':'column-text';
-    if(/class="/.test(attributes))attributes=attributes.replace(/class="/,`class="${alignment} `);
-    else attributes+=` class="${alignment}"`;
-    return `<td${attributes}>`;
-  });}).join('');
-  return `<div class="table-wrap"><table class="data-table"><caption>${caption||'Bảng · '+headers.slice(0,3).join(' / ')}</caption><thead><tr>${headers.map((h,i)=>`<th scope="col" class="${numericColumns[i]?'column-number':'column-text'}">${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
+
+function setBusy(busy) { state.busy = busy;
+    $('repeats').disabled = busy;
+    $('cancel-run').hidden = !busy;
+    $('cancel-run').disabled = !currentJob;
+    updatePending();
+    $('run').disabled = busy;
+    $('source').disabled = busy;
+    $('su').disabled = busy;
+    $('sl').disabled = busy;
+    setRunPhase(runPhase);
+    $('compare').disabled = busy;
+    $('file').disabled = busy;
+    $('format').disabled = busy; }
+
+function updatePending() {
+    const selected = $('source').value,
+        name = selected === 'paper' ? 'Bài báo · Tables 2–3' : state.datasets.find(d => d.id === selected) ?.name || $('file').files[0] ?.name;
+    const config = state.current ?.configuration;
+    const changed = state.current && (config ? selected !== config.source || Number($('su').value) !== config.su || Number($('sl').value) !== config.sl || (selected === 'upload' && (($('file').files[0] ?.lastModified ?? 0) !== config.fileModified || $('format').value !== config.format)) : state.current.source !== name || Number($('su').value) !== state.current.report.upperThreshold || Number($('sl').value) !== state.current.report.lowerThreshold);
+    $('pending-run').hidden = !state.current || (!changed && !state.busy);
+    if (state.busy && state.current) $('pending-run').textContent = 'Đang chạy lượt mới · báo cáo bên dưới là lượt trước.';
+    else if (changed) $('pending-run').textContent = 'Cấu hình đã đổi · bấm Chạy để cập nhật báo cáo.';
 }
-const tr=values=>`<tr>${values.map(v=>`<td class="${typeof v==='number'||/^-?[0-9][0-9., ]*$/.test(String(v))?'numeric':''}">${v}</td>`).join('')}</tr>`;
-async function request(url,options={}){
-  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),options.timeoutMs||30000);
-  try{
-    let response;
-    try{response=await fetch(url,{...options,signal:controller.signal});}
-    catch(error){throw Object.assign(new Error(error.name==='AbortError'?'Máy chủ chưa trả lời trong thời gian chờ.':'Không kết nối được tới máy chủ Java.'),{code:error.name==='AbortError'?'REQUEST_TIMEOUT':'NETWORK_UNAVAILABLE',action:'Kiểm tra server Java đang chạy đúng cổng. Lượt mới chưa có báo cáo hoàn tất.'});}
-    if(response.ok&&options.responseType==='blob')return await response.blob();
-    let body;
-    try{body=await response.json();}catch(error){throw Object.assign(new Error('Phản hồi máy chủ không phải JSON hợp lệ.'),{code:'INVALID_RESPONSE',action:'Kiểm tra địa chỉ server và nhật ký Java.'});}
-    if(!response.ok)throw Object.assign(new Error(body.error||`HTTP ${response.status}`),{code:body.code||'HTTP_'+response.status,action:body.action||'Kiểm tra nhật ký và thử lại sau khi sửa lỗi.'});
-    return body;
-  }finally{clearTimeout(timeout);}
+
+function thresholdLabels() {
+    $('su-percent').textContent = num(Number($('su').value) * 100, 5) + '%';
+    $('sl-percent').textContent = num(Number($('sl').value) * 100, 5) + '%';
+    updatePending();
 }
-function setError(error){
-  if(!error){$('error').hidden=true;$('error').replaceChildren();return;}
-  const message=typeof error==='string'?error:error.message||error.error;
-  const code=error.code||'VALIDATION',action=error.action||'Kiểm tra thông tin nhập và chạy lại.';
-  $('error').innerHTML=`<strong>Lỗi ${esc(code)}</strong><p>${esc(message)}</p><p class="error-action">Cách xử lý: ${esc(action)}</p>`;
-  if(!state.busy)setRunPhase('FAILED');
-  $('error').hidden=false;notifyStatus('Lỗi '+code,message+' · '+action,'error');
+
+function sourceChanged() {
+    const value = $('source').value,
+        dataset = state.datasets.find(d => d.id === value),
+        profile = dataset ?.profile;
+    $('upload-fields').hidden = value !== 'upload';
+    if (value === 'paper') { $('su').value = .23;
+        $('sl').value = .10; } else if (profile) { $('su').value = profile.su;
+        $('sl').value = profile.sl; }
+    $('source-kind').textContent = value === 'paper' ? 'Dữ liệu mẫu bài báo' : value === 'upload' ? 'Dữ liệu TXT tùy chọn' : 'Thực nghiệm dữ liệu lớn';
+    $('run-subtitle').textContent = value === 'paper' ? 'Phân tích dữ liệu mẫu từ bài báo gốc.' : 'Chọn ngưỡng thực nghiệm; kết quả và số đo lấy trực tiếp từ Java.';
+    $('source-hint').textContent = value === 'paper' ? '9 giao dịch · 6 item · 3 batch đúng theo bài báo' : value === 'upload' ? 'Giữ nguyên thứ tự giao dịch; kiểm tra số item, utility và TU' : 'Đọc tệp trên máy chủ Java · chia DB0/DB1/DB2: 80% / 10% / 10%';
+    $('preset-hint').textContent = profile ? profile.description + ' Item đối chứng: ' + profile.strongestItem + '. Có thể điều chỉnh.' : value === 'paper' ? 'Ngưỡng ví dụ bài báo · nhập tỷ lệ: 0,23 = 23%.' : 'Ngưỡng tùy chỉnh: nhập tỷ lệ, ví dụ 0,01 = 1%. Không dùng ngưỡng 23% cho mọi dữ liệu.';
+    if (!state.busy) setRunPhase('IDLE');
+    thresholdLabels();
+    if (!state.current && state.page === 'overview') renderEmpty();
 }
-function setBusy(busy){state.busy=busy;updatePending();$('run').disabled=busy;$('source').disabled=busy;$('su').disabled=busy;$('sl').disabled=busy;setRunPhase(runPhase);$('compare').disabled=busy;$('file').disabled=busy;$('format').disabled=busy;}
-function updatePending(){
-  const selected=$('source').value,name=selected==='paper'?'Bài báo · Tables 2–3':state.datasets.find(d=>d.id===selected)?.name||$('file').files[0]?.name;
-  const config=state.current?.configuration;
-  const changed=state.current&&(config?selected!==config.source||Number($('su').value)!==config.su||Number($('sl').value)!==config.sl||(selected==='upload'&&(($('file').files[0]?.lastModified??0)!==config.fileModified||$('format').value!==config.format)):state.current.source!==name||Number($('su').value)!==state.current.report.upperThreshold||Number($('sl').value)!==state.current.report.lowerThreshold);
-  $('pending-run').hidden=!state.current||(!changed&&!state.busy);
-  if(state.busy&&state.current)$('pending-run').textContent='Đang chạy lượt mới · báo cáo bên dưới là lượt trước.';
-  else if(changed)$('pending-run').textContent='Cấu hình đã đổi · bấm Chạy để cập nhật báo cáo.';
-}
-function thresholdLabels(){
-  $('su-percent').textContent=num(Number($('su').value)*100,5)+'%';
-  $('sl-percent').textContent=num(Number($('sl').value)*100,5)+'%';
-  updatePending();
-}
-function sourceChanged(){
-  const value=$('source').value,dataset=state.datasets.find(d=>d.id===value),profile=dataset?.profile;
-  $('upload-fields').hidden=value!=='upload';
-  if(value==='paper'){$('su').value=.23;$('sl').value=.10;}
-  else if(profile){$('su').value=profile.su;$('sl').value=profile.sl;}
-  $('source-kind').textContent=value==='paper'?'Dữ liệu mẫu bài báo':value==='upload'?'Dữ liệu TXT tùy chọn':'Thực nghiệm dữ liệu lớn';
-  $('run-subtitle').textContent=value==='paper'?'Phân tích dữ liệu mẫu từ bài báo gốc.':'Chọn ngưỡng thực nghiệm; kết quả và số đo lấy trực tiếp từ Java.';
-  $('source-hint').textContent=value==='paper'?'9 giao dịch · 6 item · 3 batch đúng theo bài báo':value==='upload'?'Giữ nguyên thứ tự giao dịch; kiểm tra số item, utility và TU':'Đọc tệp trên máy chủ Java · chia DB0/DB1/DB2: 80% / 10% / 10%';
-  $('preset-hint').textContent=profile?profile.description+' Item đối chứng: '+profile.strongestItem+'. Có thể điều chỉnh.':value==='paper'?'Ngưỡng ví dụ bài báo · nhập tỷ lệ: 0,23 = 23%.':'Ngưỡng tùy chỉnh: nhập tỷ lệ, ví dụ 0,01 = 1%. Không dùng ngưỡng 23% cho mọi dữ liệu.';
-  if(!state.busy)setRunPhase('IDLE');
-  thresholdLabels();
-  if(!state.current&&state.page==='overview')renderEmpty();
-}
-$('su').addEventListener('input',thresholdLabels);$('sl').addEventListener('input',thresholdLabels);
-$('source').addEventListener('change',sourceChanged);
-$('file').addEventListener('change',updatePending);$('format').addEventListener('change',updatePending);
-async function pollJob(id){
-  for(let attempt=0;attempt<3;attempt++){
-    try{return await request('/api/jobs/'+id,{timeoutMs:10000});}
-    catch(error){
-      if(!['NETWORK_UNAVAILABLE','REQUEST_TIMEOUT'].includes(error.code)||attempt===2)throw error;
-      $('live-phase').textContent='Đang kết nối lại…';setRunPhase('RECONNECTING');if(attempt===0)notifyStatus('Đang kết nối lại','Chờ phản hồi từ server Java.','warning');
-      await new Promise(resolve=>setTimeout(resolve,500));
+$('su').addEventListener('input', thresholdLabels);
+$('sl').addEventListener('input', thresholdLabels);
+$('source').addEventListener('change', sourceChanged);
+$('file').addEventListener('change', updatePending);
+$('format').addEventListener('change', updatePending);
+async function pollJob(id) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try { return await request('/api/jobs/' + id, { timeoutMs: 10000 }); } catch (error) {
+            if (!['NETWORK_UNAVAILABLE', 'REQUEST_TIMEOUT'].includes(error.code) || attempt === 2) throw error;
+            $('live-phase').textContent = 'Đang kết nối lại…';
+            setRunPhase('RECONNECTING');
+            if (attempt === 0) notifyStatus('Đang kết nối lại', 'Chờ phản hồi từ server Java.', 'warning');
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
     }
-  }
 }
-$('run-form').addEventListener('submit',async event=>{
-  event.preventDefault();if(state.busy)return;
-  const su=Number($('su').value),sl=Number($('sl').value);
-  if(!(sl>0&&sl<su&&su<=1)){setError({code:'INVALID_THRESHOLDS',message:'Ngưỡng cần thỏa mãn 0 < Sₗ < Sᵤ ≤ 1.',action:'Nhập tỷ lệ; ví dụ Su=0.03 và Sl=0.025.'});return;}
-  const selected=$('source').value,file=$('file').files[0];
-  if(selected==='upload'&&!file){setError('Hãy chọn tệp TXT cần phân tích.');return;}
-  const query=new URLSearchParams({su,sl,compare:$('compare').checked,kind:selected==='paper'?'paper':selected==='upload'?'upload':'catalog'});
-  if(selected==='upload'){query.set('name',file.name);query.set('format',$('format').value);}else if(selected!=='paper')query.set('dataset',selected);
-  runMilestones.clear();lastJobPhase='';runPhase='SUBMITTING';setError('');setBusy(true);notifyStatus('Bắt đầu phân tích',selected==='upload'?file.name:$('source').selectedOptions[0].textContent);$('status').hidden=false;$('status').textContent='Đang nạp dữ liệu và chuẩn bị phân tích…';$('progress-panel').hidden=false;$('progress-log').textContent='';
-  $('export-zip').disabled=true;$('export').disabled=true;$('export-txt').disabled=true;
-  // UI DESIGN PATTERN — SKELETON SCREEN: giữ chỗ 4 card khi chờ kết quả đầu tiên.
-  // Khi đã có báo cáo thì giữ báo cáo cũ; placeholder không phải số liệu hoặc % tiến độ.
-  if(!state.current&&['overview','batches','rescan','patterns','measurements'].includes(state.page))$('content').innerHTML='<div class="kpi-grid">'+Array(4).fill('<div class="loading-block"></div>').join('')+'</div>';
-  try {
-    const job=await request('/api/jobs?'+query,{method:'POST',headers:{'Content-Type':'text/plain; charset=utf-8'},timeoutMs:selected==='upload'?180000:15000,body:selected==='upload'?file:undefined});currentJob=job.id;
-    let status=job;showJobStatus(status);
-    while(status.state==='RUNNING'){
-      showJobStatus(status);
-      $('status').textContent=status.lines.at(-1)||'Java đang xử lý; số liệu sẽ xuất hiện khi hoàn tất.';
-      $('progress-log').textContent=status.lines.join('\n');
-      await new Promise(resolve=>setTimeout(resolve,650));status=await pollJob(job.id);
-    }
-    showJobStatus(status);
-    $('progress-log').textContent=status.lines.join('\n');
-    if(status.state==='FAILED')throw Object.assign(new Error(status.error),{code:status.code,action:status.action});
-    const result=await request('/api/jobs/'+job.id+'/result');
-    result.configuration={source:selected,su,sl,format:$('format').value,fileModified:file?.lastModified??0};
-    runPhase='COMPLETED';notifyStatus('Phân tích hoàn tất',result.source+' · '+num(result.report.transactionCount,0)+' giao dịch · '+last(result.report).largePatterns.length+' HAUP.','success');
-    state.current=result;state.patternSearch='';state.patternType='ALL';state.patternPage=0;state.batchIndex=result.report.batches.length-1;state.history.unshift(result);state.history=state.history.slice(0,8);
-    $('status').textContent='Đã hoàn tất · '+result.source+' · '+num(result.report.transactionCount,0)+' giao dịch. Số liệu đã được cập nhật.';
-    if(['datasets','glossary','verification','testcases'].includes(state.page))location.hash='overview';else render();
-  } catch(error){runPhase='FAILED';setError(error);$('live-phase').textContent='Chưa hoàn tất · có lỗi';$('live-metrics').dataset.phase='FAILED';$('status').textContent='Lượt mới chưa hoàn tất: '+error.message;render();}
-  finally {currentJob=null;setBusy(false);$('export-zip').disabled=!state.current;$('export').disabled=!state.current;$('export-txt').disabled=!state.current;}
+$('run-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (state.busy) return;
+    const su = Number($('su').value),
+        sl = Number($('sl').value);
+    if (!(sl > 0 && sl < su && su <= 1)) { setError({ code: 'INVALID_THRESHOLDS', message: 'Ngưỡng cần thỏa mãn 0 < Sₗ < Sᵤ ≤ 1.', action: 'Nhập tỷ lệ; ví dụ Su=0.03 và Sl=0.025.' }); return; }
+    const selected = $('source').value,
+        file = $('file').files[0];
+    if (selected === 'upload' && !file) { setError('Hãy chọn tệp TXT cần phân tích.'); return; }
+    const query = new URLSearchParams({ su, sl, compare: $('compare').checked, repeats: $('repeats').value, kind: selected === 'paper' ? 'paper' : selected === 'upload' ? 'upload' : 'catalog' });
+    if (selected === 'upload') { query.set('name', file.name);
+        query.set('format', $('format').value); } else if (selected !== 'paper') query.set('dataset', selected);
+    runMilestones.clear();
+    lastJobPhase = '';
+    runPhase = 'SUBMITTING';
+    setError('');
+    setBusy(true);
+    notifyStatus('Bắt đầu phân tích', selected === 'upload' ? file.name : $('source').selectedOptions[0].textContent);
+    $('status').hidden = false;
+    $('status').textContent = 'Đang nạp dữ liệu và chuẩn bị phân tích…';
+    $('progress-panel').hidden = false;
+    $('progress-log').textContent = '';
+    $('export-zip').disabled = true;
+    $('export').disabled = true;
+    $('export-txt').disabled = true;
+    // UI DESIGN PATTERN — SKELETON SCREEN: giữ chỗ 4 card khi chờ kết quả đầu tiên.
+    // Khi đã có báo cáo thì giữ báo cáo cũ; placeholder không phải số liệu hoặc % tiến độ.
+    if (!state.current && ['overview', 'batches', 'rescan', 'patterns', 'measurements'].includes(state.page)) $('content').innerHTML = '<div class="kpi-grid">' + Array(4).fill('<div class="loading-block"></div>').join('') + '</div>';
+    try {
+        const job = await request('/api/jobs?' + query, { method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, timeoutMs: selected === 'upload' ? 180000 : 15000, body: selected === 'upload' ? file : undefined });
+        currentJob = job.id;
+        let status = job;
+        showJobStatus(status);
+        while (status.state === 'RUNNING') {
+            showJobStatus(status);
+            $('status').textContent = status.lines.at(-1) || 'Java đang xử lý; số liệu sẽ xuất hiện khi hoàn tất.';
+            $('progress-log').textContent = status.lines.join('\n');
+            await new Promise(resolve => setTimeout(resolve, 650));
+            status = await pollJob(job.id);
+        }
+        showJobStatus(status);
+        $('progress-log').textContent = status.lines.join('\n');
+        if (status.state === 'CANCELLED') { runPhase = 'CANCELLED';
+            notifyStatus('Đã hủy phân tích', 'Không sử dụng kết quả dở dang.');
+            render(); return; }
+        if (status.state === 'FAILED') throw Object.assign(new Error(status.error), { code: status.code, action: status.action });
+        const result = await request('/api/jobs/' + job.id + '/result');
+        result.configuration = { source: selected, su, sl, format: $('format').value, fileModified: file ?.lastModified ?? 0, repeats: Number($('repeats').value) };
+        runPhase = 'COMPLETED';
+        notifyStatus('Phân tích hoàn tất', result.source + ' · ' + num(result.report.transactionCount, 0) + ' giao dịch · ' + last(result.report).largePatterns.length + ' HAUP.', 'success');
+        state.current = result;
+        state.patternSearch = '';
+        state.patternType = 'ALL';
+        state.patternPage = 0;
+        state.batchIndex = result.report.batches.length - 1;
+        state.history.unshift(result);
+        state.history = state.history.slice(0, 8);
+        $('status').textContent = 'Đã hoàn tất · ' + result.source + ' · ' + num(result.report.transactionCount, 0) + ' giao dịch. Số liệu đã được cập nhật.';
+        if (['datasets', 'glossary', 'verification', 'testcases', 'runs'].includes(state.page)) location.hash = 'overview';
+        else render();
+        document.getElementById('analysis-final') ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) { runPhase = 'FAILED';
+        setError(error);
+        $('live-phase').textContent = 'Chưa hoàn tất · có lỗi';
+        $('live-metrics').dataset.phase = 'FAILED';
+        $('status').textContent = 'Lượt mới chưa hoàn tất: ' + error.message;
+        render(); } finally { currentJob = null;
+        setBusy(false);
+        $('export-zip').disabled = !state.current;
+        $('export').disabled = !state.current || !!state.current.archived;
+        $('export-txt').disabled = !state.current || !!state.current.archived; }
 });
-$('export-zip').addEventListener('click',()=>download('zip'));
-$('export').addEventListener('click',()=>download('csv'));
-$('export-txt').addEventListener('click',()=>download('txt'));
-async function download(format){try{await saveDownload(`/api/jobs/${state.current.id}/export?format=${format}`,'pihaupa-report.'+format);}catch(error){setError(error);}}
-async function saveDownload(path,name){notifyStatus('Đang chuẩn bị tải',name);const blob=await request(path,{responseType:'blob'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();notifyStatus('Đã chuẩn bị tệp tải xuống',name+' · '+num(blob.size/1024,1)+' KiB.','success');setTimeout(()=>URL.revokeObjectURL(url),1000);}
+$('export-zip').addEventListener('click', () => download('zip'));
+$('export').addEventListener('click', () => download('csv'));
+$('export-txt').addEventListener('click', () => download('txt'));
+$('cancel-run').onclick = async() => { if (!currentJob) return;
+    $('cancel-run').disabled = true; try { await request(`/api/jobs/${currentJob}/cancel`, { method: 'POST' });
+        setRunPhase('CANCELLING'); } catch (error) { setError(error); } };
+async function download(format) { try { const c = state.current,
+            name = 'pihaupa-' + c.source.replace(/[^a-zA-Z0-9_-]/g, '-') + '-' + c.createdAt.replace(/[:.]/g, '-') + '.' + format;
+        await saveDownload(c.archived ? `/api/runs/${c.id}/export` : `/api/jobs/${c.id}/export?format=${format}`, name); } catch (error) { setError(error); } }
+async function saveDownload(path, name) { notifyStatus('Đang chuẩn bị tải', name); const blob = await request(path, { responseType: 'blob' }); const url = URL.createObjectURL(blob); const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    notifyStatus('Đã chuẩn bị tệp tải xuống', name + ' · ' + num(blob.size / 1024, 1) + ' KiB.', 'success');
+    setTimeout(() => URL.revokeObjectURL(url), 1000); }
 
-function navigate(){
-  const page=location.hash.slice(1),sections={batches:'analysis-batches',rescan:'analysis-batches',patterns:'analysis-patterns'};
-  if(page==='main')return;
-  if(page.startsWith('analysis-')){if(!document.getElementById(page)){state.page='overview';render();}document.getElementById(page)?.scrollIntoView({block:'start'});return;}
-  state.page=sections[page]?'overview':pages[page]?page:'overview';render();
-  if(sections[page])document.getElementById(sections[page])?.scrollIntoView({block:'start'});
+function navigate() {
+    const page = location.hash.slice(1),
+        sections = { batches: 'analysis-batches', rescan: 'analysis-batches', patterns: 'analysis-patterns' };
+    if (page === 'main') return;
+    if (page.startsWith('analysis-')) { if (!document.getElementById(page)) { state.page = 'overview';
+            render(); } if (document.getElementById(page) ?.tagName === 'DETAILS') document.getElementById(page).open = true;
+        document.getElementById(page) ?.scrollIntoView({ block: 'start' }); return; }
+    state.page = sections[page] ? 'overview' : pages[page] ? page : 'overview';
+    render();
+    if (sections[page]) document.getElementById(sections[page]) ?.scrollIntoView({ block: 'start' });
 }
-window.addEventListener('hashchange',navigate);
-function render(){
-  const analysis=state.page==='overview';
-  $('run-panel').hidden=!analysis;$('status').hidden=!analysis||!$('status').textContent;$('progress-panel').hidden=!analysis||!$('progress-log').textContent;
-  const [title,description]=pages[state.page];$('page-title').textContent=title;$('page-description').textContent=description;$('breadcrumb').textContent=title;
-  document.querySelectorAll('[data-page]').forEach(a=>{const active=a.dataset.page===state.page;a.classList.toggle('active',active);if(active)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
-  if(state.page==='datasets')renderDatasets();else if(state.page==='glossary')renderGlossary();else if(state.page==='verification')renderVerification();else if(state.page==='testcases')renderTestCases();
-  else if(!state.current)renderEmpty();else {
-    const views={overview:renderAnalysis,measurements:renderMeasurements};
-    views[state.page]();
-  }
+window.addEventListener('hashchange', navigate);
+
+function render() {
+    const analysis = state.page === 'overview';
+    $('run-panel').hidden = !analysis;
+    $('status').hidden = !analysis || !$('status').textContent;
+    $('progress-panel').hidden = !analysis || !$('progress-log').textContent;
+    const [title, description] = pages[state.page];
+    $('page-title').textContent = title;
+    $('page-description').textContent = description;
+    $('breadcrumb').textContent = title;
+    document.querySelectorAll('[data-page]').forEach(a => { const active = a.dataset.page === state.page;
+        a.classList.toggle('active', active); if (active) a.setAttribute('aria-current', 'page');
+        else a.removeAttribute('aria-current'); });
+    if (state.page === 'datasets') renderDatasets();
+    else if (state.page === 'glossary') renderGlossary();
+    else if (state.page === 'verification') renderVerification();
+    else if (state.page === 'testcases') renderTestCases();
+    else if (state.page === 'runs') renderRuns();
+    else if (!state.current) renderEmpty();
+    else {
+        const views = { overview: renderAnalysis, measurements: renderMeasurements };
+        views[state.page]();
+    }
 }
-function renderEmpty(){
-  const selected=$('source').value,ready=selected==='paper'?'Dữ liệu mẫu của bài báo đã sẵn sàng.':selected==='upload'?'Chọn tệp TXT và kiểm tra ngưỡng trước khi chạy.':'Bộ dữ liệu lớn đã được chọn, ngưỡng khởi đầu đã sẵn sàng.';
-  $('content').innerHTML=`<section class="card empty"><span class="empty-icon">${icon('measurements')}</span><h2>Sẵn sàng cho lần phân tích đầu tiên</h2><p>${ready} Bấm <strong>Chạy phân tích</strong> để xem kết quả thực, công thức theo từng batch và các biểu đồ đo lường.</p><a class="button" href="#verification">${icon('verification')}Xem kiểm chứng bài báo</a><div class="empty-flow"><span>Chọn dữ liệu</span><span>→</span><span>Chạy lõi Java</span><span>→</span><span>Khám phá báo cáo</span></div></section>`;
+
+function renderEmpty() {
+    const selected = $('source').value,
+        ready = selected === 'paper' ? 'Dữ liệu mẫu của bài báo đã sẵn sàng.' : selected === 'upload' ? 'Chọn tệp TXT và kiểm tra ngưỡng trước khi chạy.' : 'Bộ dữ liệu lớn đã được chọn, ngưỡng khởi đầu đã sẵn sàng.';
+    $('content').innerHTML = `<section class="card empty"><span class="empty-icon">${icon('measurements')}</span><h2>Sẵn sàng cho lần phân tích đầu tiên</h2><p>${ready} Bấm <strong>Chạy phân tích</strong> để xem kết quả thực, công thức theo từng batch và các biểu đồ đo lường.</p><a class="button" href="#verification">${icon('verification')}Xem kiểm chứng bài báo</a><div class="empty-flow"><span>Chọn dữ liệu</span><span>→</span><span>Chạy lõi Java</span><span>→</span><span>Khám phá báo cáo</span></div></section>`;
 }
-function reportNote(){const c=state.current;return `<div class="result-note"><span>${badge('Đã hoàn tất','green')} <strong>${esc(c.source)}</strong> · ${esc(new Date(c.createdAt).toLocaleString('vi-VN'))}</span><span>Sᵤ = ${num(c.report.upperThreshold,17)} · Sₗ = ${num(c.report.lowerThreshold,17)} · ${num(c.report.batchCount,0)} batch</span></div>`;}
-function auEvidence(patterns,batch,report){
-  return [
-    {label:'Ngưỡng phân loại',text:`${batch.name}: TU(DB) = ${num(batch.totalTransactionUtility)}; Sᵤ = ${num(report.upperThreshold,17)}. Ngưỡng HAUP = ${num(report.upperThreshold,17)} × ${num(batch.totalTransactionUtility)} = ${num(batch.minUtilUpper)} đơn vị tiện ích.`},
-    ...patterns.slice(0,3).map(p=>({label:`Mẫu ${p.name}`,text:`Tổng tiện ích U(P) = ${num(p.sumUtility,6)}; số item |P| = ${p.length}. AU(P) = ${num(p.sumUtility,6)} / ${p.length} = ${num(p.averageUtility,6)}. ${p.averageUtility>=batch.minUtilUpper?`${num(p.averageUtility,6)} ≥ ${num(batch.minUtilUpper)} ⇒ HAUP (LARGE).`:p.averageUtility>=batch.minUtilLower?`${num(batch.minUtilLower)} ≤ ${num(p.averageUtility,6)} < ${num(batch.minUtilUpper)} ⇒ PRE-LARGE, chưa đạt HAUP.`:`${num(p.averageUtility,6)} < ${num(batch.minUtilLower)} ⇒ SMALL.`}`})),
-    {label:'Phạm vi',text:`Minh họa ${Math.min(patterns.length,3)}/${patterns.length} mẫu trên biểu đồ. AU chia cho số item của mẫu, không chia cho số giao dịch.`}
-  ];
-}
-function renderOverview(target){
-  const c=state.current,r=c.report,b=last(r),labels=r.batches.map(b=>b.name);
-  const counts=[{name:'LARGE / HAUP',values:r.batches.map(b=>b.largePatterns.length),color:colors.blue},{name:'PRE-LARGE đang quản lý',values:r.batches.map(b=>b.preLargePatterns.length),color:colors.amber}];
-  const top=[...b.largePatterns].sort((a,b)=>b.averageUtility-a.averageUtility).slice(0,6);
-  const noHaup=b.largePatterns.length===0?notice(r.upperBounds[0]?.auub<b.minUtilUpper?`<strong>Không có HAUP ở ngưỡng hiện tại.</strong> max AUUB(item) = ${num(r.upperBounds[0].auub)} &lt; Sᵤ × TU(DB) = ${num(b.minUtilUpper)}: cận trên loại trừ mọi HAUP. Có thể chọn ngưỡng khác để thực nghiệm.`:'<strong>Không có HAUP ở ngưỡng hiện tại.</strong> Các mẫu được khai phá đều không đạt ngưỡng LARGE. Xem bảng ngưỡng và AUUB ở Phân tích từng bước.'):'';
-  target.innerHTML=notice(`<strong>Kết quả cuối · ${esc(b.name)}:</strong> ${num(b.largePatterns.length,0)} HAUP trên ${num(r.transactionCount,0)} giao dịch. <a href="#analysis-final">Xem kết luận, công thức và danh sách cuối →</a>`)+noHaup+`<div class="kpi-grid">${kpi('Giao dịch đã xử lý',num(r.transactionCount,0),num(r.batchCount,0)+' batch · '+num(c.report.upperBounds.length,0)+' item','datasets')}${kpi('Mẫu tiện ích cao',num(b.largePatterns.length,0),badge('LARGE / HAUP','green')+' AU ≥ '+num(b.minUtilUpper),'patterns')}${kpi('Thời gian thuật toán',num(r.elapsedMs), 'Không bao gồm đọc tệp và UI','clock','ms')}${kpi('Số lần re-scan',num(r.stats.rescanCount,0),'Không tính initial scan ở DB0','rescan')}</div>
+
+function reportNote() { const c = state.current; return `<div class="result-note"><span>${badge('Đã hoàn tất','green')} <strong>${esc(c.source)}</strong> · ${esc(new Date(c.createdAt).toLocaleString('vi-VN'))}</span><span>Sᵤ = ${num(c.report.upperThreshold,17)} · Sₗ = ${num(c.report.lowerThreshold,17)} · ${num(c.report.batchCount,0)} batch</span></div>`; }
+
+function renderOverview(target) {
+    const c = state.current,
+        r = c.report,
+        b = last(r),
+        labels = r.batches.map(b => b.name);
+    const counts = [{ name: 'LARGE / HAUP', values: r.batches.map(b => b.largePatterns.length), color: colors.blue }, { name: 'PRE-LARGE đang quản lý', values: r.batches.map(b => b.preLargePatterns.length), color: colors.amber }];
+    const top = [...b.largePatterns].sort((a, b) => b.averageUtility - a.averageUtility).slice(0, 6);
+    const noHaup = b.largePatterns.length === 0 ? notice(r.upperBounds[0] ?.auub < b.minUtilUpper ? `<strong>Không có HAUP ở ngưỡng hiện tại.</strong> max AUUB(item) = ${num(r.upperBounds[0].auub)} &lt; Sᵤ × TU(DB) = ${num(b.minUtilUpper)}: cận trên loại trừ mọi HAUP. Có thể chọn ngưỡng khác để thực nghiệm.` : '<strong>Không có HAUP ở ngưỡng hiện tại.</strong> Các mẫu được khai phá đều không đạt ngưỡng LARGE. Xem bảng ngưỡng và AUUB ở Phân tích từng bước.') : '';
+    target.innerHTML = noHaup + `<div class="kpi-grid">${kpi('Giao dịch đã xử lý',num(r.transactionCount,0),num(r.batchCount,0)+' batch · '+num(c.report.upperBounds.length,0)+' item','datasets')}${kpi('Mẫu tiện ích cao',num(b.largePatterns.length,0),badge('LARGE / HAUP','green')+' AU ≥ '+num(b.minUtilUpper),'patterns')}${kpi('Thời gian thuật toán',num(r.elapsedMs), 'Không bao gồm đọc tệp và UI','clock','ms')}${kpi('Số lần re-scan',num(r.stats.rescanCount,0),'Không tính initial scan ở DB0','rescan')}</div>
   <div class="two-col">${card('Số HAUP và PRE-LARGE theo batch','Số mẫu sau mỗi batch dữ liệu',chart(labels,counts,{unit:'mẫu'}),badge('Theo batch'))}${card('AU của HAUP cuối','Tối đa 6 mẫu LARGE ở batch cuối',chart(top.map(p=>p.name),[{name:'AU(P)',values:top.map(p=>p.averageUtility),color:colors.green}],{unit:'utility',evidenceRows:auEvidence(top,b,r),emptyMessage:'Đã xử lý dữ liệu nhưng không có HAUP đạt ngưỡng LARGE ở lượt này. Xem giải thích cận trên và các mẫu PRE-LARGE bên dưới.'}))}</div>
   <div class="two-col equal-col history">${card('TU(DB) và ngưỡng LARGE / PRE-LARGE','Giá trị tuyệt đối trên dữ liệu tích lũy',chart(labels,[{name:'TU(DB)',values:r.batches.map(b=>b.totalTransactionUtility),color:colors.slate},{name:'Sᵤ × TU(DB)',values:r.batches.map(b=>b.minUtilUpper),color:colors.blue},{name:'Sₗ × TU(DB)',values:r.batches.map(b=>b.minUtilLower),color:colors.amber}],{kind:'line',unit:'utility'}))}${card('Căn cứ phân loại','Batch cuối · '+esc(b.name),`<div class="metric-row"><span>Tổng utility TU(DB)</span><strong>${num(b.totalTransactionUtility)}</strong></div><div class="formula">LARGE: AU(P) ≥ ${num(r.upperThreshold,17)} × ${num(b.totalTransactionUtility)} = ${num(b.minUtilUpper)}<br>PRE-LARGE: ${num(b.minUtilLower)} ≤ AU(P) &lt; ${num(b.minUtilUpper)}</div><p class="subtle">PRE-LARGE là các mẫu được quản lý trong PT. Khi không re-scan, đây không phải phép khai phá lại toàn bộ mẫu PRE-LARGE.</p><p class="source-note"><a href="#glossary">Tra cứu định nghĩa AU, AUUB, MAU →</a></p>`)}</div>`;
 }
@@ -229,28 +301,8 @@ function batchDecision(b,r){
   const od=b.totalTransactionUtility-b.accumulatedTransactionUtility,lhs=b.accumulatedMaximumUtility-r.upperThreshold*b.accumulatedTransactionUtility,rhs=(r.upperThreshold-r.lowerThreshold)*od;
   return `<div class="batch-decision ${b.rescanTriggered?'rescan':'update'}"><strong>${b.rescanTriggered?'Quét lại toàn bộ và dựng cây':'Chỉ cập nhật cây mẫu hiện có'}</strong><p>ID tích lũy: TU = ${num(b.accumulatedTransactionUtility)} · MU = ${num(b.accumulatedMaximumUtility)}<br>TU(OD) = ${num(od)}</p><div class="formula">${num(b.accumulatedMaximumUtility)} − ${num(r.upperThreshold,17)} × ${num(b.accumulatedTransactionUtility)} = <strong>${num(lhs)}</strong><br>(${num(r.upperThreshold,17)} − ${num(r.lowerThreshold,17)}) × ${num(od)} = <strong>${num(rhs)}</strong><br>⇒ ${num(lhs)} ${b.rescanTriggered?'≥':'&lt;'} ${num(rhs)} · ${b.rescanTriggered?'Re-scan':'Không re-scan'}</div><p>${b.rescanTriggered?'Reset ID và cập nhật mốc OD.':'Giữ mốc OD; ID tiếp tục cộng dồn.'}</p><details><summary>Chi tiết Eq. (6)</summary><p>Mẫu số = ${num(b.tightRescanDenominator,6)}. ${b.tightRescanDenominator>0?'Cận MU(ID) = '+num(b.tightRescanLimit,6):'Dùng Eq. (12) trực tiếp vì mẫu số không dương.'}</p></details></div>`;
 }
-function paperConclusionEvidence(c){
-  const r=c.report,b=last(r),isPaper=c.configuration?.source==='paper'||c.source==='Bài báo · Tables 2–3';
-  const standard=isPaper&&r.upperThreshold===.23&&r.lowerThreshold===.10&&r.transactionCount===9&&r.batches.length===3;
-  const reference='<a href="https://doi.org/10.1186/s40537-025-01352-x" target="_blank" rel="noreferrer">Bài báo gốc · Example 4, Table 5, Tables 2–3 ↗</a>';
-  if(!standard)return `<div class="conclusion-evidence"><h3>Phạm vi kiểm chứng</h3><p>${isPaper?'Dữ liệu mẫu · ngưỡng tùy chỉnh.':'Dataset thực nghiệm · cấu hình của lượt chạy.'} Đối chiếu theo tập HAUP và AU, không chỉ số lượng.</p><p>${c.comparison?badge(c.comparison.sameHaups?'Original/Tight: KHỚP HAUP và AU':'Original/Tight: KHÔNG KHỚP',c.comparison.sameHaups?'green':'amber'):badge('Original/Tight: chưa chạy')}</p><p class="subtle">Chưa có oracle độc lập cho cấu hình này. ${reference}</p></div>`;
-  // Với tên chữ ghép BE, chuẩn hóa theo item để không phụ thuộc thứ tự hiển thị.
-  const canonical=p=>p.name.replace(/[^A-Z]/g,'').split('').sort().join(',');
-  const near=(a,e)=>Number.isFinite(a)&&Math.abs(a-e)<1e-8;
-  const expectedFinal={'E':84,'B':75,'B,E':63.5},expectedDb1={'E':72,'B,E':45};
-  const matches=(batch,expected)=>batch.largePatterns.length===Object.keys(expected).length&&batch.largePatterns.every(p=>near(p.averageUtility,expected[canonical(p)]));
-  const db1=r.batches[1],direct=matches(db1,expectedDb1),derived=matches(b,expectedFinal)&&near(b.totalTransactionUtility,240);
-  const compareRows=Object.entries(expectedFinal).map(([name,au])=>{const p=b.largePatterns.find(p=>canonical(p)===name);return tr([`<strong class="mono">${esc('{'+name+'}')}</strong>`,name==='B,E'?'127 / 2':name==='E'?'84 / 1':'75 / 1',num(au,6),p?num(p.averageUtility,6):'Thiếu mẫu',badge(near(p?.averageUtility,au)?'KHỚP':'KHÔNG KHỚP',near(p?.averageUtility,au)?'green':'amber')]);});
-  return `<div class="conclusion-evidence"><h3>Đối chiếu HAUP với dữ liệu bài báo</h3><div class="evidence-grid"><section><h4>DB1 · Table 5 / Example 4</h4><p>HAUP: <strong>{E}:72 · {B,E}:45</strong></p><p>TU=173 · Sᵤ×TU=39,79</p><p>Tight: không re-scan · Original: re-scan</p>${badge(direct?'KHỚP HAUP / AU':'KHÔNG KHỚP',direct?'green':'amber')}</section><section><h4>DB2 · Tính từ Tables 2–3</h4><p>HAUP: <strong>{E}, {B}, {B,E}</strong></p><p>TU=240 · LARGE ≥55,2 · PRE-LARGE ≥24 và &lt;55,2</p><p class="subtle">Giá trị tính từ dữ liệu mẫu; không phải bảng DB2 in trực tiếp.</p>${badge(derived?'KHỚP 3 HAUP':'KHÔNG KHỚP',derived?'green':'amber')}</section></div>${table(['Mẫu P','U(P) / |P|','AU tham chiếu','AU thực tính','Đối chiếu'],compareRows,'Bảng · AU của HAUP sau DB2 (utility)')}<p class="conclusion-line"><strong>Kết luận:</strong> ${derived?'3 HAUP đạt AU ≥55,2.':'Tập HAUP/AU chưa khớp tham chiếu.'} PRE-LARGE không tính vào HAUP.</p><p>${c.comparison?badge(c.comparison.sameHaups?'Original/Tight: KHỚP HAUP / AU':'Original/Tight: KHÔNG KHỚP',c.comparison.sameHaups?'green':'amber'):badge('Original/Tight: chưa chạy trong lượt này')}</p><details class="source-note"><summary>Nguồn & phạm vi</summary><p>BE và EB cùng tập item {B,E}. Tham chiếu từ dữ liệu mẫu: Tight 1, Original 2 re-scan, không gồm DB0. Thời gian là số đo trên máy hiện tại; ít re-scan không đồng nghĩa nhanh gấp đôi. Kiểm chứng mẫu không xác nhận mọi dataset.</p><p>${reference}</p></details></div>`;
-
-}
-function finalConclusion(){
-  const c=state.current,r=c.report,b=last(r),patterns=[...b.largePatterns].sort((a,b)=>b.averageUtility-a.averageUtility),maxBound=r.upperBounds.reduce((max,x)=>Math.max(max,x.auub),0);
-  const empty=patterns.length?'':`<p class="final-empty"><strong>Kết quả cuối: không có HAUP ở ngưỡng này.</strong> ${maxBound<b.minUtilUpper?`max AUUB = ${num(maxBound)} &lt; ${num(b.minUtilUpper)}: cận trên loại trừ HAUP.`:'Không có mẫu LARGE trong kết quả miner trả về.'} Đây là kết quả đã xử lý, không phải thiếu dữ liệu.</p>`;
-  return `<section class="card final-conclusion" id="analysis-final"><div class="card-head"><div><h2>Bước cuối · Kết luận khai phá</h2><p>${esc(c.source)} · toàn bộ ${num(r.transactionCount,0)} giao dịch đến ${esc(b.name)} · độc lập với bộ lọc bên trên</p></div>${badge('Đã hoàn tất','green')}</div><div class="card-body"><p><strong>${num(patterns.length,0)} HAUP (LARGE)</strong> là kết quả cuối. ${num(b.preLargePatterns.length,0)} PRE-LARGE đang quản lý là tập dự phòng, không tính vào HAUP.</p><div class="formula">TU(DB) = ${num(b.totalTransactionUtility)}<br>Ngưỡng HAUP = Sᵤ × TU(DB) = ${num(r.upperThreshold,17)} × ${num(b.totalTransactionUtility)} = ${num(b.minUtilUpper)}<br>Mẫu đạt khi AU(P) = U(P) / |P| ≥ ${num(b.minUtilUpper)}</div>${empty}${paperConclusionEvidence(c)}<p>Đã xử lý ${r.batchCount} batch · ${r.stats.rescanCount} lần re-scan (không gồm DB0) · thuật toán ${num(r.elapsedMs)} ms.</p><p class="subtle">Đánh giá tính đúng dựa trên tập HAUP và AU; xem phạm vi đối chiếu ở phần trên.</p></div>${patterns.length?table(['HAUP cuối P','U(P)','|P|','AU(P)','Sᵤ × TU(DB)','Phân loại'],patterns.slice(0,20).map(p=>tr([esc(p.name),num(p.sumUtility,6),p.length,num(p.averageUtility,6),num(b.minUtilUpper,6),'LARGE / HAUP'])),'Tối đa 20 AU của HAUP cuối; file patterns.csv chứa toàn bộ các batch và loại mẫu.'):''}<div class="card-body"><a href="#analysis-patterns" class="button final-all">Xem toàn bộ HAUP cuối (${patterns.length})</a><p class="subtle">Xuất Gói báo cáo ZIP để lưu công thức, kết quả và số đo của chính lượt này.</p></div></section>`;
-}
 function renderAnalysis(){
-  $('content').innerHTML=reportNote()+`<nav class="analysis-guide" aria-label="Mục lục báo cáo"><strong class="subtle">Trong báo cáo:</strong><a href="#analysis-final">Kết luận cuối</a><span class="guide-arrow">·</span><a href="#analysis-summary">Tổng quan kết quả</a><span class="guide-arrow" aria-hidden="true">·</span><a href="#analysis-batches">Từng batch & re-scan</a><span class="guide-arrow" aria-hidden="true">·</span><a href="#analysis-patterns">Mẫu khai phá</a></nav><section id="analysis-summary" class="analysis-section" aria-labelledby="summary-title"><div class="analysis-heading"><div><h2 id="summary-title">Tổng quan kết quả</h2><p>Đọc nhanh dữ liệu, số mẫu và chi phí xử lý.</p></div></div><div id="summary-content"></div></section><section id="analysis-batches" class="analysis-section" aria-labelledby="batches-title"><div class="analysis-heading"><div><h2 id="batches-title">Từng batch & quyết định re-scan</h2><p>Utility, ngưỡng và lý do quét lại nằm ngay trong mỗi batch.</p></div></div><div id="batches-content"></div></section><section id="analysis-patterns" class="analysis-section" aria-labelledby="patterns-title"><div class="analysis-heading"><div><h2 id="patterns-title">Kết quả khai phá</h2><p>Mặc định xem batch cuối; lọc hoặc tìm mẫu ngay tại đây.</p></div></div><div id="patterns-content"></div></section>${finalConclusion()}`;
+  $('content').innerHTML=reportNote()+finalConclusion(state.current)+`<nav class="analysis-guide" aria-label="Mục lục báo cáo"><strong class="subtle">Trong báo cáo:</strong><a href="#analysis-final">Kết luận cuối</a><span class="guide-arrow">·</span><a href="#analysis-summary">Tổng quan kết quả</a><span class="guide-arrow" aria-hidden="true">·</span><a href="#analysis-batches">Từng batch & re-scan</a><span class="guide-arrow" aria-hidden="true">·</span><a href="#analysis-patterns">Mẫu khai phá</a></nav><section id="analysis-summary" class="analysis-section" aria-labelledby="summary-title"><div class="analysis-heading"><div><h2 id="summary-title">Tổng quan kết quả</h2><p>Đọc nhanh dữ liệu, số mẫu và chi phí xử lý.</p></div></div><div id="summary-content"></div></section><details id="analysis-batches" class="analysis-section report-detail"><summary>Batch & điều kiện re-scan</summary><section aria-labelledby="batches-title"><div class="analysis-heading"><div><h2 id="batches-title">Từng batch & quyết định re-scan</h2><p>Utility, ngưỡng và lý do quét lại nằm ngay trong mỗi batch.</p></div></div><div id="batches-content"></div></section></details><section id="analysis-patterns" class="analysis-section" aria-labelledby="patterns-title"><div class="analysis-heading"><div><h2 id="patterns-title">Kết quả khai phá</h2><p>Mặc định xem batch cuối; lọc hoặc tìm mẫu ngay tại đây.</p></div></div><div id="patterns-content"></div></section>`;
   document.querySelector('.final-all').onclick=()=>{state.batchIndex=state.current.report.batches.length-1;state.patternType='LARGE';state.patternSearch='';state.patternPage=0;renderPatterns($('patterns-content'));};
   renderOverview($('summary-content'));renderBatches($('batches-content'));renderPatterns($('patterns-content'));
 }
@@ -271,14 +323,14 @@ function renderPatterns(target){
 function renderMeasurements(){
   const c=state.current,r=c.report,m=c.measurement,labels=r.batches.map(b=>b.name);
   $('content').innerHTML=reportNote()+notice('<strong>Phạm vi phép đo:</strong> elapsedMs đo thời gian xử lý trong AnalysisReport.run; đọc tệp được đo riêng. Heap là đỉnh quan sát trước/sau batch, không phải RSS hay đỉnh bộ nhớ tuyệt đối. CPU là thời gian CPU của luồng thực hiện, không phải % CPU toàn máy.')+
-  `<div class="kpi-grid">${kpi('Đọc dữ liệu',num(m.importMs),'Không bao gồm thuật toán','datasets','ms')}${kpi('Thuật toán',num(r.elapsedMs),'System.nanoTime · thời gian tường','clock','ms')}${kpi('CPU luồng khai phá',num(m.threadCpuMs),'Không gồm đọc tệp, UI, đối chiếu','measurements',m.threadCpuMs==null?'':'ms')}${kpi('JVM heap quan sát',num(m.heapPeakObservedMb),'Lấy mẫu trước / sau mỗi batch','measurements','MiB')}</div>`+
+  `<div class="kpi-grid">${kpi('Đọc + SHA-256',num(m.importMs),'Không bao gồm thuật toán','datasets','ms')}${kpi('Thuật toán · median',num(r.elapsedMs),(m.repetitions||1)+' lượt · '+num(m.minMs??r.elapsedMs)+'–'+num(m.maxMs??r.elapsedMs)+' ms','clock','ms')}${kpi('CPU luồng khai phá',num(m.threadCpuMs),'Tổng CPU các lượt + warm-up; không gồm đối chiếu','measurements',m.threadCpuMs==null?'':'ms')}${kpi('JVM heap quan sát',num(m.heapPeakObservedMb),'Lấy mẫu trước / sau mỗi batch','measurements','MiB')}</div>`+
   `<div class="two-col equal-col">${card('Thời gian theo batch','Thời gian tường của processBatch',chart(labels,[{name:'Thuật toán',values:r.batches.map(b=>b.elapsedMs),color:colors.blue}],{unit:'ms'}))}${card('JVM heap theo batch','MiB = bytes / 1.048.576 · không phải RSS',chart(labels,[{name:'Trước batch',values:r.batches.map(b=>b.memoryBeforeMb),color:colors.slate},{name:'Sau batch',values:r.batches.map(b=>b.memoryAfterMb),color:colors.cyan},{name:'Đỉnh quan sát tích lũy',values:r.batches.map(b=>b.peakMemoryMb),color:colors.blue}],{kind:'line',unit:'MiB'}))}</div>`+
   `<div class="two-col equal-col">${card('Các giai đoạn xử lý','Đọc / thuật toán: thời gian tường. CPU: thời gian CPU luồng khai phá.',chart(m.threadCpuMs==null?['Đọc dữ liệu','Thuật toán']:['Đọc dữ liệu','Thuật toán','CPU luồng'],[{name:'Thời gian',values:m.threadCpuMs==null?[m.importMs,r.elapsedMs]:[m.importMs,r.elapsedMs,m.threadCpuMs],color:colors.blue}],{unit:'ms'}))}${card('Khối lượng công việc của miner','Bộ đếm thuật toán; không phải thời gian xử lý',chart(['Mẫu đã duyệt','Nút kết hợp'],[{name:'Số lượng',values:[r.stats.patternsVisited,r.stats.combinedNodes],color:colors.slate}],{unit:'lượt / nút'}))}</div>`+
-  (c.comparison?renderComparison(c.comparison):notice('Để so sánh Original Eq. (5) và Tight Eq. (6), bật <strong>Đối chiếu Original / Tight</strong> rồi chạy lại. Hai chính sách được đo bằng các lượt thực thi riêng.'))+
+  manifestPanel(c)+(c.comparison?renderComparison(c.comparison):notice('Để so sánh Original Eq. (5) và Tight Eq. (6), bật <strong>Đối chiếu Original / Tight</strong> rồi chạy lại. Hai chính sách được đo bằng các lượt thực thi riêng.'))+
   `<section class="card history"><div class="card-head"><div><h2>Lịch sử phép đo trong phiên</h2><p>Tối đa 8 lượt · điều kiện ngưỡng được lưu cùng số liệu</p></div></div><div class="card-body">${chart(state.history.map((c,i)=>'Lượt '+(state.history.length-i)),[{name:'Thuật toán',values:state.history.map(c=>c.report.elapsedMs),color:colors.blue}],{unit:'ms'})}</div>${table(['Lượt','Dữ liệu','Sᵤ / Sₗ','Giao dịch','HAUP','Re-scan','Thuật toán (ms)','Heap (MiB)'],state.history.map((c,i)=>tr([`<button class="button history-open" data-index="${i}">Mở ${state.history.length-i}</button>`,esc(c.source),num(c.report.upperThreshold,17)+' / '+num(c.report.lowerThreshold,17),num(c.report.transactionCount,0),last(c.report).largePatterns.length,c.report.stats.rescanCount,num(c.report.elapsedMs),num(c.measurement.heapPeakObservedMb)])))}</section>`;
   document.querySelectorAll('.history-open').forEach(button=>button.onclick=()=>{state.current=state.history[Number(button.dataset.index)];render();});
 }
-function renderComparison(pair){const reports=[pair.original,pair.tight],labels=['Original','Tight'];return notice(pair.sameHaups?'<strong>Đối chiếu đạt:</strong> tập HAUP cuối và AU giống nhau giữa hai chính sách.':'<strong>Đối chiếu KHÔNG đạt:</strong> tập HAUP hoặc AU khác nhau; cần kiểm tra kết quả.')+`<div class="two-col equal-col">${card('Original / Tight · re-scan','Không tính initial scan',chart(labels,[{name:'Re-scan',values:reports.map(r=>r.stats.rescanCount),color:colors.amber}],{unit:'lần'}))}${card('Original / Tight · thời gian','≤ 1.000 giao dịch: warm-up + median 3 lượt; lớn hơn: 1 lượt',chart(labels,[{name:'Thuật toán',values:reports.map(r=>r.elapsedMs),color:colors.blue}],{unit:'ms'}))}</div><div class="two-col equal-col">${card('Original / Tight · heap','Đỉnh heap quan sát trong JVM chung; không phải phép đo cách ly',chart(labels,[{name:'Heap',values:reports.map(r=>r.peakMemoryMb),color:colors.cyan}],{unit:'MiB'}))}${card('Original / Tight · số mẫu duyệt','Đo công việc thực tế trong miner',chart(labels,[{name:'Mẫu duyệt',values:reports.map(r=>r.stats.patternsVisited),color:colors.slate}],{unit:'lượt'}))}</div>`;}
+function renderComparison(pair){const reports=[pair.original,pair.tight],labels=['Original','Tight'];return notice(pair.sameHaups?'<strong>Đối chiếu đạt:</strong> tập HAUP cuối và AU giống nhau giữa hai chính sách.':'<strong>Đối chiếu KHÔNG đạt:</strong> tập HAUP hoặc AU khác nhau; cần kiểm tra kết quả.')+table(['Chính sách','Lượt đo','Median (ms)','Min (ms)','Max (ms)','Môi trường'],reports.map((r,i)=>{const t=pair.timing?.[i===0?'original':'tight'];return tr([labels[i],pair.repetitions||1,num(r.elapsedMs),num(t?.minMs??r.elapsedMs),num(t?.maxMs??r.elapsedMs),pair.isolated?'JVM riêng':'JVM chung']);}),'Bảng · Thời gian Original / Tight')+`<div class="two-col equal-col">${card('Original / Tight · re-scan','Không tính initial scan',chart(labels,[{name:'Re-scan',values:reports.map(r=>r.stats.rescanCount),color:colors.amber}],{unit:'lần'}))}${card('Original / Tight · thời gian','Mỗi chính sách: JVM riêng · median các lượt đo',chart(labels,[{name:'Thuật toán',values:reports.map(r=>r.elapsedMs),color:colors.blue}],{unit:'ms'}))}</div><div class="two-col equal-col">${card('Original / Tight · heap','JVM riêng cho từng chính sách; sampled heap, không phải RSS',chart(labels,[{name:'Heap',values:reports.map(r=>r.peakMemoryMb),color:colors.cyan}],{unit:'MiB'}))}${card('Original / Tight · số mẫu duyệt','Đo công việc thực tế trong miner',chart(labels,[{name:'Mẫu duyệt',values:reports.map(r=>r.stats.patternsVisited),color:colors.slate}],{unit:'lượt'}))}</div>`;}
 function renderDatasets(){
   $('content').innerHTML=notice('<strong>Định dạng gốc:</strong> items:TU:itemUtilities. Mỗi utility đã là u(i,T); parser dùng EU = 1 để giữ nguyên giá trị. Kiểm tra số item, utility dương và TU bằng tổng utility. Giữ thứ tự dòng; chia 80% / 10% / 10% là kịch bản mô phỏng chèn batch, không phải batch được tác giả cung cấp.')+
   `<div class="dataset-list">${state.datasets.map(d=>`<section class="card dataset-card"><span class="dataset-icon">${icon('datasets')}</span><h2>${esc(d.name.replace(/-metadata/i,''))}</h2><p>transactions.txt · ${num(d.bytes/1048576)} MiB<br>Dữ liệu gốc trên máy chủ Java${d.profile?'<br>Ngưỡng khởi đầu: Sᵤ '+num(d.profile.su*100,5)+'% · Sₗ '+num(d.profile.sl*100,5)+'%':''}</p><button class="button dataset-select" data-id="${esc(d.id)}">Chọn bộ dữ liệu ${icon('arrow')}</button></section>`).join('')}</div>`+
@@ -330,6 +382,13 @@ async function renderTestCases(){
     try{state.testResults=await request('/api/testcases/run',{method:'POST'});notifyStatus('Kiểm thử hoàn tất',state.testResults.passed+'/'+state.testResults.total+' ca đạt.',state.testResults.state==='PASSED'?'success':'error');}catch(error){setError(error);}
     finally{state.testsBusy=false;if(state.page==='testcases')renderTestCases();}
   };
+}
+async function renderRuns(){
+  $('content').innerHTML=card('Hồ sơ trên máy','Đang tải…','<div class="loading-block"></div>');
+  try{const runs=await request('/api/runs');if(state.page!=='runs')return;
+    $('content').innerHTML=card('Lượt chạy đã lưu','20 hồ sơ gần nhất · không mất khi tải lại trang',runs.length?table(['Thời điểm','Dữ liệu','Sᵤ / Sₗ','Giao dịch','HAUP','Median (ms)',''],runs.map(r=>tr([esc(new Date(r.createdAt).toLocaleString('vi-VN')),esc(r.source),num(r.su,17)+' / '+num(r.sl,17),num(r.rows,0),r.haups,num(r.medianMs),`<button class="button open-run" data-id="${esc(r.id)}">Mở kết quả</button>`])),'Bảng · Hồ sơ thực nghiệm'): '<p class="subtle">Chưa có hồ sơ. Lượt hoàn tất sẽ được lưu trong results/runs.</p>');
+    document.querySelectorAll('.open-run').forEach(button=>{button.disabled=state.busy;button.onclick=async()=>{try{const c=await request('/api/runs/'+button.dataset.id);c.archived=true;state.current=c;const selected=c.source==='Bài báo · Tables 2–3'?'paper':state.datasets.find(d=>d.name===c.source)?.id||'upload';$('source').value=selected;sourceChanged();$('su').value=c.report.upperThreshold;$('sl').value=c.report.lowerThreshold;$('repeats').value=c.manifest?.measuredRuns||1;$('format').value=c.manifest?.format||'transactions';$('compare').checked=!!c.manifest?.comparison;c.configuration={source:selected,su:c.report.upperThreshold,sl:c.report.lowerThreshold,format:$('format').value,fileModified:0};thresholdLabels();state.batchIndex=c.report.batches.length-1;state.patternType='ALL';state.patternSearch='';state.patternPage=0;$('export-zip').disabled=false;$('export').disabled=true;$('export-txt').disabled=true;location.hash='overview';}catch(error){setError(error);}};});
+  }catch(error){setError(error);}
 }
 async function initialize(){navigate();try{state.datasets=await request('/api/datasets');for(const d of state.datasets){const option=document.createElement('option');option.value=d.id;option.textContent=d.name.replace(/-metadata/i,'')+' · '+num(d.bytes/1048576)+' MiB';$('source').append(option);}if(state.page==='datasets')renderDatasets();}catch(error){setError(error);}}
 sourceChanged();initialize();

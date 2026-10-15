@@ -17,6 +17,27 @@ public final class LabApplicationTest {
                 ||!AppError.from(new java.util.NoSuchElementException("expired")).code().equals("JOB_EXPIRED")
                 ||!AppError.from(new IllegalStateException("busy")).code().equals("BUSY"))
             throw new AssertionError("Structured error classification");
+        var oracleInput=InputParser.parseBuiltInSample();
+        if(!SmallDataOracle.verify(oracleInput,AnalysisReport.run(oracleInput)).get("state").equals("PASSED"))throw new AssertionError("Independent oracle");
+        var wrong=AnalysisReport.run(new InputData(.01,.005,oracleInput.externalUtilities(),oracleInput.batches()));
+        if(!SmallDataOracle.verify(oracleInput,wrong).get("state").equals("FAILED"))throw new AssertionError("Oracle must detect a different HAUP set");
+        var fp1=ExperimentProfile.capture(InputSource.paper(),oracleInput,1);
+        var fp2=ExperimentProfile.capture(InputSource.paper(),new InputData(.2,.1,oracleInput.externalUtilities(),oracleInput.batches()),3);
+        if(!fp1.get("sha256").equals(fp2.get("sha256")))throw new AssertionError("Dataset identity must not depend on thresholds");
+        try(AnalysisService cancellation=new AnalysisService()){
+            var started=new java.util.concurrent.CountDownLatch(1);var cleaned=new java.util.concurrent.atomic.AtomicBoolean();
+            InputSource slow=new InputSource(){public String name(){return "cancellation-test";}public InputData read(double su,double sl,java.util.function.Consumer<String> log){started.countDown();try{Thread.sleep(30000);}catch(InterruptedException e){Thread.currentThread().interrupt();throw new java.util.concurrent.CancellationException();}return oracleInput;}public void cleanup(){cleaned.set(true);}};
+            var job=cancellation.submit(slow,.23,.1,false);if(!started.await(2,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("Worker not started");
+            cancellation.cancel(job.id);long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(3);while(job.state.equals("RUNNING")&&System.nanoTime()<deadline)Thread.sleep(10);
+            if(!job.state.equals("CANCELLED")||job.result!=null||!cleaned.get())throw new AssertionError("Cancelled job must cleanup without publishing partial result: "+job.status());
+            var next=cancellation.submit(InputSource.paper(),.23,.1,false,3);deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(10);while(next.state.equals("RUNNING")&&System.nanoTime()<deadline)Thread.sleep(10);
+            if(!next.state.equals("COMPLETED")||next.timingSamples.size()!=3||!next.result.contains("\"medianMs\""))throw new AssertionError("Repeated measurement after cancel");
+            if(!cancellation.store().result(next.id).equals(next.result)||cancellation.store().archive(next.id).length==0)throw new AssertionError("Persisted experiment");
+        }
+        var childStarted=new java.util.concurrent.CountDownLatch(1);var childStopped=new java.util.concurrent.atomic.AtomicBoolean();var childFailure=new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        Thread childTest=new Thread(()->{try{IsolatedBenchmark.run(oracleInput,3,line->{if(line.startsWith("Đã khởi động JVM"))childStarted.countDown();});}catch(java.util.concurrent.CancellationException expected){childStopped.set(true);}catch(Throwable failure){childFailure.set(failure);}});
+        childTest.start();if(!childStarted.await(5,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("Child JVM did not start");childTest.interrupt();childTest.join(5000);
+        if(childTest.isAlive()||!childStopped.get()||childFailure.get()!=null)throw new AssertionError("Isolated cancellation cleanup: "+childFailure.get());
         var profile=DatasetProfile.find("NewMushroom-Metadata",2597897);
         if(profile==null || !(0<profile.sl() && profile.sl()<profile.su() && profile.su()<profile.singletonAU()/profile.totalTU()))
             throw new AssertionError("Dataset threshold profile must retain the strongest singleton as HAUP");
@@ -44,7 +65,7 @@ public final class LabApplicationTest {
                 if (!job.state.equals("COMPLETED") || job.result==null || !job.result.contains("\"sameHaups\":true"))
                     throw new AssertionError(job.status());
                 var archive=ReportArchive.analysis(job);
-                if(!archive.keySet().containsAll(java.util.List.of("BAO_CAO.html","patterns.csv","performance-by-rows.csv","upper-bounds.csv","report.json","measurements.csv","comparison.csv")))throw new AssertionError("Missing archive files");
+                if(!archive.keySet().containsAll(java.util.List.of("BAO_CAO.html","patterns.csv","performance-by-rows.csv","upper-bounds.csv","report.json","measurements.csv","comparison.csv","manifest.json","verification.json","timing-samples.csv")))throw new AssertionError("Missing archive files");
                 if(!archive.get("BAO_CAO.html").contains("<svg") || !archive.get("measurements.csv").contains("threadCpuMs"))throw new AssertionError("Missing chart or CPU measurement");
                 byte[] zipped=ReportArchive.zip(archive);
                 try(var zin=new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(zipped))){int entries=0;while(zin.getNextEntry()!=null){zin.readAllBytes();entries++;}if(entries!=archive.size())throw new AssertionError("ZIP entries lost");}

@@ -4,3 +4,6 @@ tmp/
 *.log
 .idea/
 .vscode/
+
+# Local experiment archives (may include dataset previews)
+results/runs/

@@ -40,8 +40,8 @@ public final class InputWriter {
     }
 
     private static void writeHeader(InputData input, BufferedWriter writer) throws IOException {
-        writer.write(String.format(Locale.US, "upper=%.12g%n", input.upperThreshold()));
-        writer.write(String.format(Locale.US, "lower=%.12g%n%n", input.lowerThreshold()));
+        writer.write("upper="+Double.toString(input.upperThreshold())+"\n");
+        writer.write("lower="+Double.toString(input.lowerThreshold())+"\n\n");
         writer.write("external:\n");
         List<Map.Entry<String, Double>> entries = new ArrayList<>(input.externalUtilities().entrySet());
         entries.sort(Map.Entry.comparingByKey(InputWriter::naturalCompare));
@@ -58,6 +58,7 @@ public final class InputWriter {
     private static void writeBatch(Batch batch, BufferedWriter writer) throws IOException {
         writer.write("\nbatch " + batch.name() + "\n");
         for (Transaction transaction : batch.transactions()) {
+            if(Thread.currentThread().isInterrupted())throw new java.util.concurrent.CancellationException("Đã hủy ghi dữ liệu tạm.");
             writer.write(transaction.tid() + ":");
             List<Map.Entry<String, Double>> entries = new ArrayList<>(transaction.internalUtilities().entrySet());
             entries.sort(Comparator.comparing(Map.Entry::getKey, InputWriter::naturalCompare));
@@ -76,7 +77,7 @@ public final class InputWriter {
         if (value == Math.rint(value)) {
             return String.format(Locale.US, "%.0f", value);
         }
-        return String.format(Locale.US, "%.12g", value);
+        return Double.toString(value);
     }
 
     private static void createParent(Path path) throws IOException {

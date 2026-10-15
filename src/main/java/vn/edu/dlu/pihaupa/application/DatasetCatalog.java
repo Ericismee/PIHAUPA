@@ -40,7 +40,7 @@ public final class DatasetCatalog {
         return result;
     }
     public String name(String id) { return path(id).getParent().getFileName().toString(); }
-    private Path path(String id) {
+    public Path path(String id) {
         Path path = files.get(id);
         if (path == null) throw new IllegalArgumentException("Bộ dữ liệu không tồn tại trong danh mục.");
         return path;

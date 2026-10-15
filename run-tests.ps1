@@ -1,4 +1,6 @@
 $ErrorActionPreference = 'Stop'
+$testRunRootPrevious=$env:PIHAUPA_RUN_ROOT
+$env:PIHAUPA_RUN_ROOT=Join-Path $PSScriptRoot 'target/test-runs'
 Push-Location $PSScriptRoot
 try {
     & ./scripts/build.ps1
@@ -10,4 +12,4 @@ try {
         & java -ea -cp 'target/classes;target/test-classes' "piHAUPA.$testClass"
         if ($LASTEXITCODE -ne 0) { throw "$testClass failed." }
     }
-} finally { Pop-Location }
+} finally { Pop-Location; $env:PIHAUPA_RUN_ROOT=$testRunRootPrevious }
