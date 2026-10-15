@@ -335,11 +335,13 @@ public final class PiHaupaMiner {
             PiEntry leftEntry = left.entries.get(leftIndex);
             PiEntry rightEntry = right.entries.get(rightIndex);
             if (leftEntry.transactionIndex < rightEntry.transactionIndex) {
-                leftIndex++;
+                leftIndex = left.entries.size() - leftIndex >= 8L * (right.entries.size() - rightIndex)
+                        ? seekPosition(left.entries, leftIndex + 1, rightEntry.transactionIndex) : leftIndex + 1;
                 continue;
             }
             if (leftEntry.transactionIndex > rightEntry.transactionIndex) {
-                rightIndex++;
+                rightIndex = right.entries.size() - rightIndex >= 8L * (left.entries.size() - leftIndex)
+                        ? seekPosition(right.entries, rightIndex + 1, leftEntry.transactionIndex) : rightIndex + 1;
                 continue;
             }
             double utility = leftEntry.utility + rightEntry.utility - leftEntry.prefixUtility;
@@ -352,6 +354,21 @@ public final class PiHaupaMiner {
             rightIndex++;
         }
         return combined;
+    }
+
+    /** Ghép thích nghi: list lệch kích thước lớn thì nhảy bằng binary search.
+     * Chỉ bỏ các vị trí < target, không bỏ giao dịch khớp. Thứ tự kết quả không đổi.
+     * List cân bằng vẫn dùng merge tuyến tính, tránh thêm chi phí tìm kiếm nhị phân.
+     */
+    private static int seekPosition(List<PiEntry> entries, int first, int target) {
+        int low = first;
+        int high = entries.size();
+        while (low < high) {
+            int middle = low + (high - low) / 2;
+            if (entries.get(middle).transactionIndex < target) low = middle + 1;
+            else high = middle;
+        }
+        return low;
     }
 
     private double maximumAverageUpperBound(PiNode node, int patternLength) {

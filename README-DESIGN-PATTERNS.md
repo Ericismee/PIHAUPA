@@ -328,3 +328,17 @@ JDK 25, heap tối đa 2 GiB; mỗi phiên JVM riêng, 2 warm-up và 5 lượt �
 Chạy benchmark sau build: `javac -encoding UTF-8 -cp target/classes -d target/bench scripts/OptimizationBench.java`, rồi `java -Xmx2g -cp "target/classes;target/bench" OptimizationBench .04 .025`. Tham số thứ ba tùy chọn là đường dẫn transactions.txt. Để so trước/sau, chạy cùng harness trên classpath của từng revision trong JVM riêng.
 
 Không tự tăng ngưỡng, cắt số kết quả, lấy mẫu dữ liệu hoặc thay điều kiện re-scan để làm runtime trông tốt hơn. Song song hóa, cache kết quả và thay cấu trúc list cần phép đo riêng: chúng có thể tăng RAM, trả kết quả cũ hoặc thay đổi thứ tự cộng số thực. Không áp dụng chỉ vì mang tên một pattern.
+
+
+### Ghép list thích nghi và thử nghiệm bị loại
+
+`combine` trong [PiHaupaMiner.java](src/main/java/piHAUPA/PiHaupaMiner.java) vẫn merge hai con trỏ khi kích thước list cân bằng. Khi phần còn lại của một list dài ít nhất 8 lần list kia, `seekPosition` tìm nhị phân vị trí đầu tiên ≥ TID-position đang cần. Chỉ bỏ các vị trí nhỏ hơn mục tiêu; giữ nguyên thứ tự giao dịch khớp và thứ tự cộng utility. Đây là kỹ thuật thuật toán, không tăng số mẫu GoF của dự án. Ngưỡng tỷ lệ 8 là heuristic triển khai, không phải tham số bài báo.
+
+- Mục đích: tránh quét từng phần tử của list dài khi list còn lại rất thưa. Trong trường hợp lệch mạnh, chi phí tìm kiếm tiến gần O(m log n), với m là list ngắn. Không hứa tăng tốc list cân bằng.
+- JFR profile trên dữ liệu tổng hợp chỉ ra `combine` chiếm phần lớn mẫu CPU; đây là bằng chứng trên workload thử, không đại diện mọi dataset.
+- Benchmark seed 71352, 3.000 giao dịch, 16 item; 3 item xuất hiện với xác suất 80%, các item còn lại 3%; Su=0,2%, Sl=0,1%; heap 2 GiB; 10 warm-up + 9 lượt: median 9,84 → 7,60 ms, giảm 22,7%. Cùng SHA-256 mẫu/utility/phân loại, số mẫu duyệt 575 và ghép 565.
+- Dữ liệu cân bằng, Su=3%, Sl=1,5%: 164,21 → 161,70 ms; chênh lệch nhỏ trong vùng dao động, chưa kết luận có tăng tốc.
+- Kiểm thử thêm 20 seed có support lệch, cả hai chính sách re-scan, đối chiếu oracle exhaustive HAUP cuối; bộ kiểm thử Java còn lại vẫn chạy.
+- Đã thử lưu toàn bộ PIHAUP-List bằng mảng và gộp tính MAU vào join. Kết quả khớp nhưng runtime không cải thiện đồng đều, nên **không giữ các thử nghiệm này trong lõi chạy**.
+
+Benchmark bật dữ liệu lệch bằng JVM option `-Dbench.skew=true`; đổi warm-up/lượt đo với `-Dbench.warmups=10 -Dbench.repetitions=9`. PowerShell cần đặt từng JVM option có dấu chấm trong dấu nháy. JFR có thể bật bằng `-XX:StartFlightRecording=filename=target/mining.jfr,settings=profile,dumponexit=true`; phép đo có profiler phải tách khỏi benchmark runtime.

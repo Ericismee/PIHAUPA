@@ -22,10 +22,32 @@ public final class LargeTextDatasetTest {
         String exported = ExportBundle.reportText(input, report, "test/transactions.txt");
         check(exported.contains("Su = 0.500000") && !exported.contains("Original"), "single-policy export");
         check(ExportBundle.reportCsv(input, report, "test").contains("\"AUUB\",\"2\""), "AUUB CSV");
+        verifiesSkewedSupports();
         verifiesInsertionPartition();
         verifiesCompactStorageAgainstMapAndOracle();
         verifiesNumericParsingAndSinglePassHash();
         System.out.println("Large TXT test passed.");
+    }
+
+    private static void verifiesSkewedSupports() throws Exception {
+        for(int seed=0;seed<20;seed++){
+            var random=new java.util.Random(seed);
+            StringBuilder text=new StringBuilder();
+            for(int row=0;row<100;row++){
+                StringBuilder items=new StringBuilder("1 "),values=new StringBuilder("2 ");
+                int total=2;
+                for(int item=2;item<=6;item++)if(random.nextDouble()<.04){
+                    int utility=1+random.nextInt(20);
+                    items.append(item).append(' ');values.append(utility).append(' ');total+=utility;
+                }
+                text.append(items).append(':').append(total).append(':').append(values).append('\n');
+            }
+            InputData input=ArchiveDatasetReader.readTransactionsText(new StringReader(text.toString()),"skew",.03,.01,x->{});
+            for(RescanPolicy policy:RescanPolicy.values()){
+                var result=AnalysisReport.run(input,policy);
+                check("PASSED".equals(vn.edu.dlu.pihaupa.application.SmallDataOracle.verify(input,result).get("state")),"skewed support oracle");
+            }
+        }
     }
 
     private static void verifiesInsertionPartition() throws Exception {
