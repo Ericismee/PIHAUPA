@@ -172,6 +172,17 @@
                 </select>
               </div>
             </div>
+            <div class="threshold-picker">
+              <label for="threshold-mode">Mức ngưỡng</label>
+              <select id="threshold-mode">
+                <option value="reference">Tham chiếu</option>
+                <option value="overview">Tổng quan · 70% / 50% r</option>
+                <option value="extended">Mở rộng · 50% / 30% r</option>
+                <option value="deep">Ngưỡng thấp · 25% / 10% r</option>
+                <option value="custom">Tự nhập Sᵤ / Sₗ</option>
+              </select>
+              <p id="threshold-note" class="subtle" aria-live="polite"></p>
+            </div>
             <details id="run-options" class="run-options">
               <summary>Tùy chọn & giải thích</summary>
               <div class="options-body">

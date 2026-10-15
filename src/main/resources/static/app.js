@@ -241,6 +241,45 @@ function thresholdLabels() {
   updatePending();
 }
 
+// Các mức ngưỡng là cấu hình khảo sát, không giới hạn thời gian hay số mẫu trả về.
+const thresholdLevels = {
+  overview: [0.7, 0.5],
+  extended: [0.5, 0.3],
+  deep: [0.25, 0.1],
+};
+function applyThresholdMode() {
+  const mode = $('threshold-mode').value;
+  const dataset = state.datasets.find((d) => d.id === $('source').value);
+  const profile = dataset?.profile;
+  const paper = $('source').value === 'paper';
+  if (mode !== 'custom') {
+    if (mode === 'reference') {
+      $('su').value = paper ? 0.23 : profile.su;
+      $('sl').value = paper ? 0.1 : profile.sl;
+    } else {
+      // Mẫu bài báo: max AU(singleton) = 84, TU(DB) = 240.
+      const ratio = paper ? 84 / 240 : profile.singletonAU / profile.totalTU;
+      const [upper, lower] = thresholdLevels[mode];
+      $('su').value = upper * ratio;
+      $('sl').value = lower * ratio;
+    }
+  }
+  $('threshold-note').textContent =
+    mode === 'custom'
+      ? 'Nhập tỷ lệ: 0,01 = 1%. Giữ nguyên ngưỡng bạn chọn; không tự tăng để chạy nhanh.'
+      : mode === 'reference'
+        ? paper
+          ? 'Ngưỡng ví dụ bài báo: 23% / 10%.'
+          : 'Ngưỡng khởi đầu cũ, sát mẫu mạnh nhất; có thể ít HAUP.'
+        : 'r = max AU(item đơn) / TU(DB). Đây là mức khảo sát của ứng dụng, không phải benchmark bài báo. Hạ ngưỡng có thể tăng số mẫu, thời gian và bộ nhớ.';
+  thresholdLabels();
+}
+function markCustomThreshold() {
+  $('threshold-mode').value = 'custom';
+  applyThresholdMode();
+}
+$('threshold-mode').addEventListener('change', applyThresholdMode);
+
 function sourceChanged() {
   const value = $('source').value,
     dataset = state.datasets.find((d) => d.id === value),
@@ -274,12 +313,18 @@ function sourceChanged() {
     : value === 'paper'
       ? 'Ngưỡng ví dụ bài báo · nhập tỷ lệ: 0,23 = 23%.'
       : 'Ngưỡng tùy chỉnh: nhập tỷ lệ, ví dụ 0,01 = 1%. Không dùng ngưỡng 23% cho mọi dữ liệu.';
+  const known = value === 'paper' || !!profile;
+  for (const option of $('threshold-mode').options) {
+    option.disabled = !known && option.value !== 'custom';
+  }
+  $('threshold-mode').value = value === 'paper' ? 'reference' : profile ? 'overview' : 'custom';
+  applyThresholdMode();
   if (!state.busy) setRunPhase('IDLE');
   thresholdLabels();
   if (!state.current && state.page === 'overview') renderEmpty();
 }
-$('su').addEventListener('input', thresholdLabels);
-$('sl').addEventListener('input', thresholdLabels);
+$('su').addEventListener('input', markCustomThreshold);
+$('sl').addEventListener('input', markCustomThreshold);
 $('source').addEventListener('change', sourceChanged);
 $('file').addEventListener('change', updatePending);
 $('format').addEventListener('change', updatePending);
@@ -877,7 +922,32 @@ function renderMeasurements() {
         },
       ],
       { unit: 'ms' },
-    )}</div>${table(
+    )}</div><div class="two-col equal-col"><div class="card-body">${chart(
+      state.history.map((c, i) => 'Lượt ' + (state.history.length - i)),
+      [
+        {
+          name: 'HAUP cuối',
+          values: state.history.map((c) => last(c.report).largePatterns.length),
+          color: colors.green,
+        },
+        {
+          name: 'PRE-LARGE',
+          values: state.history.map((c) => last(c.report).preLargePatterns.length),
+          color: colors.amber,
+        },
+      ],
+      { unit: 'mẫu', xLabel: 'Lượt chạy', yLabel: 'Số mẫu' },
+    )}</div><div class="card-body">${chart(
+      state.history.map((c, i) => 'Lượt ' + (state.history.length - i)),
+      [
+        {
+          name: 'Đỉnh heap lấy mẫu',
+          values: state.history.map((c) => c.measurement.heapPeakObservedMb),
+          color: colors.slate,
+        },
+      ],
+      { unit: 'MiB', xLabel: 'Lượt chạy', yLabel: 'JVM heap (MiB)' },
+    )}</div></div>${table(
       [
         'Lượt',
         'Dữ liệu',
@@ -1242,6 +1312,8 @@ async function renderRuns() {
           sourceChanged();
           $('su').value = c.report.upperThreshold;
           $('sl').value = c.report.lowerThreshold;
+          $('threshold-mode').value = 'custom';
+          applyThresholdMode();
           $('repeats').value = c.manifest?.measuredRuns || 1;
           $('format').value = c.manifest?.format || 'transactions';
           $('compare').checked = !!c.manifest?.comparison;

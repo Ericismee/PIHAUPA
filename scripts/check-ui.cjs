@@ -37,6 +37,9 @@ class Element {
   querySelector() {
     return new Element();
   }
+  get options() {
+    return [];
+  }
   get selectedOptions() {
     return [{ textContent: 'Bài báo gốc' }];
   }
@@ -128,3 +131,26 @@ for (const file of ['tmp/experiment-result.json', 'tmp/experiment-large.json']) 
 vm.runInContext("state.busy=true;currentJob='test';setRunPhase('CANCELLING');", ctx);
 if (!el('run').innerHTML.includes('Đang hủy')) throw Error('Cancel status');
 console.log('PASS cancel UI, report module imports, alignment builder');
+
+// Preset selection must preserve arbitrary user thresholds and the paper reference.
+vm.runInContext(
+  `
+state.datasets = [{id:'sample', profile:{su:.09,sl:.08,singletonAU:100,totalTU:1000}}];
+$('source').value='sample';
+sourceChanged();
+if (Math.abs(Number($('su').value)-.07)>1e-12) throw Error('Catalog default overview');
+$('threshold-mode').value='extended';
+applyThresholdMode();
+if (Math.abs(Number($('su').value)-.05)>1e-12) throw Error('Extended threshold');
+$('su').value=.0123456789;
+$('sl').value=.003;
+markCustomThreshold();
+if (Number($('su').value)!==.0123456789 || Number($('sl').value)!==.003) throw Error('Custom threshold was overwritten');
+$('source').value='paper';
+$('threshold-mode').value='reference';
+applyThresholdMode();
+if (Number($('su').value)!==.23 || Number($('sl').value)!==.1) throw Error('Paper reference changed');
+`,
+  ctx,
+);
+console.log('PASS selectable thresholds, exact custom values and paper reference');

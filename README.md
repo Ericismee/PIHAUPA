@@ -136,11 +136,17 @@ Giá trị trong giao dịch là `IU`; `external` chứa `EU`. Ví dụ trên mi
 
 ### 4.3. Ngưỡng cho dữ liệu lớn
 
-`dataset-profiles.properties` chứa cấu hình khởi đầu cho 6 dataset đã đối chứng. `DatasetProfile` chỉ áp dụng cấu hình khi tên và dung lượng tệp khớp; đây không phải kiểm tra checksum nội dung.
+Đặt `r = max AU(singleton) / TU(DB)`. Trên web, mỗi tệp trong danh mục có thể chọn:
 
-Đặt `r = max AU(singleton) / TU(DB)`. Các preset dùng `Su=0.90r`, `Sl=0.80r`; NewConnects dùng `0.99r` và `0.98r` để hạn chế không gian mẫu lúc bắt đầu. Các ngưỡng này là **preset của ứng dụng**, không phải bộ ngưỡng benchmark do bài báo công bố. Người dùng có thể chỉnh lại; hạ ngưỡng có thể tăng mạnh thời gian và bộ nhớ.
+- **Tham chiếu:** cấu hình cũ `0.90r / 0.80r`; NewConnects `0.99r / 0.98r`.
+- **Tổng quan (mặc định dữ liệu lớn):** `Su=0.70r`, `Sl=0.50r`.
+- **Mở rộng:** `Su=0.50r`, `Sl=0.30r`.
+- **Ngưỡng thấp:** `Su=0.25r`, `Sl=0.10r`.
+- **Tự nhập:** giữ chính xác Su/Sl người dùng nhập, không tự nâng ngưỡng hoặc cắt kết quả để chạy nhanh.
 
-Không có HAUP có thể là kết quả đúng ở ngưỡng đã chọn. Nếu `max AUUB(item) < Su × TU(DB)`, cận trên đã loại mọi HAUP. Cần phân biệt trường hợp này với lỗi parser, lỗi xử lý hoặc bộ lọc đang loại hết mẫu.
+Các mức này là cấu hình khảo sát của ứng dụng, **không phải benchmark bài báo**, không bảo đảm số HAUP hay thời gian cụ thể. Hạ ngưỡng có thể tăng mạnh không gian tìm kiếm, thời gian và bộ nhớ; dùng nút Hủy nếu muốn dừng. Tệp tải lên chưa có thống kê singleton dùng ngưỡng tự nhập. Mẫu bài báo vẫn mặc định 0,23/0,10; nếu chọn mức khảo sát thì dùng r=84/240, và kết quả không còn là lượt kiểm chứng ngưỡng gốc.
+
+Mỗi lượt lưu ngưỡng thực tế, HAUP, PRE-LARGE, re-scan, thời gian và bộ nhớ. Xem **Đo lường & biểu đồ** để so sánh các lượt; **Hồ sơ thực nghiệm** giữ kết quả sau khi khởi động lại. So sánh ngưỡng trên cùng tệp và cùng môi trường; số mẫu nhiều hơn không tự chứng minh thuật toán đúng. Oracle độc lập chỉ áp dụng dữ liệu nhỏ trong phạm vi hỗ trợ.
 
 ## 5. Công thức và luồng thuật toán
 

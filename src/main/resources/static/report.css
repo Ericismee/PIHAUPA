@@ -282,3 +282,35 @@ main {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.threshold-picker {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(180px, 280px);
+  gap: 10px 16px;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.threshold-picker label {
+  font-size: 12px;
+  font-weight: 600;
+}
+.threshold-picker select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  color: var(--text);
+}
+.threshold-picker p {
+  grid-column: 1 / -1;
+  margin: 0;
+  line-height: 1.6;
+}
+@media (max-width: 520px) {
+  .threshold-picker {
+    grid-template-columns: 1fr;
+  }
+}
