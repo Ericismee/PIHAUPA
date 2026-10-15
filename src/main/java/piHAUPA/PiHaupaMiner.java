@@ -15,6 +15,7 @@ import java.util.concurrent.CancellationException;
 public final class PiHaupaMiner {
     private java.util.function.Consumer<String> progress = ignored -> {};
     private long lastProgressNanos;
+    private boolean allIntegerUtilities = true;
     public void setProgress(java.util.function.Consumer<String> progress) { this.progress = progress; }
     private void reportProgress(String message) { progress.accept(message); }
 
@@ -87,6 +88,7 @@ public final class PiHaupaMiner {
             batchMU += maximum;
             final double transactionMaximum = maximum;
             transaction.forEachUtility((item, utility) -> {
+                if (utility != Math.rint(utility)) allIntegerUtilities = false;
                 globalAuub.merge(item, transactionMaximum, Double::sum);
                 globalItemUtility.merge(item, unitExternalUtilities ? utility
                         : utility*externalUtilities.get(item), Double::sum);
@@ -174,7 +176,7 @@ public final class PiHaupaMiner {
         patternTree.clear();
         if (allCandidatesBelowLowerBound()) {
             reportProgress("03 · Mọi AUUB đều dưới ngưỡng PRE-LARGE; không cần mở rộng, PT rỗng.");
-            managedPatternTrie.rebuild(patternTree);
+            managedPatternTrie.rebuild(patternTree, globalAuub);
             return;
         }
         reportProgress("03 · Xây dựng PIHAUP-List trên "+allTransactions.size()+" giao dịch.");
@@ -185,7 +187,7 @@ public final class PiHaupaMiner {
         lastProgressNanos=System.nanoTime();
         patternExpansion(globalList.nodes(), new ArrayList<>());
         reportProgress("06 · Hoàn tất mở rộng; xây PT từ "+patternTree.size()+" mẫu đang giữ.");
-        managedPatternTrie.rebuild(patternTree);
+        managedPatternTrie.rebuild(patternTree, globalAuub);
     }
 
     /** AU(P) cannot exceed AUUB of any item in P; this avoids materializing empty lists. */
@@ -396,7 +398,8 @@ public final class PiHaupaMiner {
     private void updateManagedPatterns(List<Transaction> transactions) {
         for (Transaction transaction : transactions) {
             checkCancelled();
-            managedPatternTrie.update(transaction, externalUtilities);
+            managedPatternTrie.update(transaction, externalUtilities,
+                    unitExternalUtilities && allIntegerUtilities && totalTransactionUtility < 0x1.0p52);
         }
     }
 
@@ -526,40 +529,54 @@ public final class PiHaupaMiner {
     }
 
     /**
-     * Prefix tree over canonical (lexicographically sorted) pattern items. During an
+     * Cây cập nhật PT theo AUUB giảm dần như bài báo; khóa mẫu vẫn chuẩn hóa.
+     * Thứ tự được chốt lúc rebuild và không đổi giữa hai lần re-scan. During an
      * incremental update it follows only paths that already exist in the managed
      * pattern set. This avoids enumerating all 2^n subsets of a wide transaction.
      */
     private static final class ManagedPatternTrie {
         private final TrieNode root = new TrieNode(null);
 
-        private void rebuild(Map<PatternKey, PatternStat> patterns) {
+        private void rebuild(Map<PatternKey, PatternStat> patterns, Map<String, Double> auub) {
             root.children.clear();
             root.stat = null;
             for (Map.Entry<PatternKey, PatternStat> entry : patterns.entrySet()) {
                 TrieNode current = root;
-                for (String item : entry.getKey().items) {
+                List<String> ordered = new ArrayList<>(entry.getKey().items);
+                ordered.sort(Comparator.comparingDouble((String item) -> auub.getOrDefault(item, 0.0))
+                        .reversed().thenComparing(Comparator.naturalOrder()));
+                for (String item : ordered) {
                     current = current.children.computeIfAbsent(item, TrieNode::new);
                 }
                 current.stat = entry.getValue();
             }
         }
 
-        private void update(Transaction transaction, Map<String, Double> externalUtilities) {
-            updateChildren(root, transaction, externalUtilities, 0.0);
+        private void update(Transaction transaction, Map<String, Double> externalUtilities, boolean exactIntegerSums) {
+            updateChildren(root, transaction, externalUtilities, 0.0, exactIntegerSums);
         }
 
         private void updateChildren(TrieNode parent, Transaction transaction,
-                                    Map<String, Double> externalUtilities, double prefixUtility) {
+                                    Map<String, Double> externalUtilities, double prefixUtility, boolean exactIntegerSums) {
             for (TrieNode child : parent.children.values()) {
                 if (!transaction.internalUtilities().containsKey(child.item)) {
                     continue;
                 }
-                double utility = prefixUtility + transaction.utilityOf(child.item, externalUtilities);
+                double pathUtility = exactIntegerSums
+                        ? prefixUtility + transaction.utilityOf(child.item, externalUtilities) : 0.0;
                 if (child.stat != null) {
-                    child.stat.sumUtility += utility;
+                    // Cây đổi thứ tự nhưng phép cộng utility giữ thứ tự chuẩn hóa cũ.
+                    // Tránh sai khác làm tròn số thực tại biên ngưỡng phân loại.
+                    double canonicalUtility = pathUtility;
+                    if (!exactIntegerSums) {
+                        canonicalUtility = 0.0;
+                        for (String item : child.stat.items) {
+                            canonicalUtility += transaction.utilityOf(item, externalUtilities);
+                        }
+                    }
+                    child.stat.sumUtility += canonicalUtility;
                 }
-                updateChildren(child, transaction, externalUtilities, utility);
+                updateChildren(child, transaction, externalUtilities, pathUtility, exactIntegerSums);
             }
         }
     }

@@ -22,11 +22,39 @@ public final class LargeTextDatasetTest {
         String exported = ExportBundle.reportText(input, report, "test/transactions.txt");
         check(exported.contains("Su = 0.500000") && !exported.contains("Original"), "single-policy export");
         check(ExportBundle.reportCsv(input, report, "test").contains("\"AUUB\",\"2\""), "AUUB CSV");
+        verifiesCanonicalIncrementalSums();
         verifiesSkewedSupports();
         verifiesInsertionPartition();
         verifiesCompactStorageAgainstMapAndOracle();
         verifiesNumericParsingAndSinglePassHash();
         System.out.println("Large TXT test passed.");
+    }
+
+    private static void verifiesCanonicalIncrementalSums() {
+        var external=java.util.Map.of("A",1.0,"B",1.0,"C",1.0);
+        var miner=new PiHaupaMiner(external,1.0,1e-18);
+        var original=java.util.List.of(
+                new Transaction("base1",java.util.Map.of("A",.1,"B",.2,"C",100.0)),
+                new Transaction("base2",java.util.Map.of("C",1000.0)));
+        var initial=miner.processBatch(new Batch("DB0",original));
+        var expected=new java.util.HashMap<java.util.List<String>,Double>();
+        java.util.stream.Stream.concat(initial.largePatterns().stream(),initial.preLargePatterns().stream())
+                .forEach(p->expected.put(p.items(),p.sumUtility()));
+        var additions=java.util.List.of(
+                new Transaction("new1",java.util.Map.of("A",.1,"B",.2,"C",100.0)),
+                new Transaction("new2",java.util.Map.of("A",0x1.0p52,"B",.2,"C",.1)));
+        for(int i=0;i<additions.size();i++){
+            Transaction transaction=additions.get(i);
+            expected.replaceAll((items,sum)->{
+                if(!transaction.internalUtilities().keySet().containsAll(items))return sum;
+                double value=0.0;for(String item:items)value+=transaction.utilityOf(item,external);
+                return sum+value;
+            });
+            var updated=miner.processBatch(new Batch("DB"+(i+1),java.util.List.of(transaction)));
+            check(!updated.rescanTriggered(),"Su=1 must update existing PT");
+            java.util.stream.Stream.concat(updated.largePatterns().stream(),updated.preLargePatterns().stream())
+                    .forEach(p->check(Double.doubleToLongBits(p.sumUtility())==Double.doubleToLongBits(expected.get(p.items())),"canonical utility bits after AUUB-order update"));
+        }
     }
 
     private static void verifiesSkewedSupports() throws Exception {

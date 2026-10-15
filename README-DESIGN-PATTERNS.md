@@ -342,3 +342,12 @@ Không tự tăng ngưỡng, cắt số kết quả, lấy mẫu dữ liệu ho�
 - Đã thử lưu toàn bộ PIHAUP-List bằng mảng và gộp tính MAU vào join. Kết quả khớp nhưng runtime không cải thiện đồng đều, nên **không giữ các thử nghiệm này trong lõi chạy**.
 
 Benchmark bật dữ liệu lệch bằng JVM option `-Dbench.skew=true`; đổi warm-up/lượt đo với `-Dbench.warmups=10 -Dbench.repetitions=9`. PowerShell cần đặt từng JVM option có dấu chấm trong dấu nháy. JFR có thể bật bằng `-XX:StartFlightRecording=filename=target/mining.jfr,settings=profile,dumponexit=true`; phép đo có profiler phải tách khỏi benchmark runtime.
+
+
+### Cây cập nhật PT theo thứ tự bài báo
+
+`ManagedPatternTrie.rebuild` sắp xếp item của mỗi đường đi theo **AUUB giảm dần** (hòa thì theo tên), tương ứng phần Analysis of high average utility patterns, trang 13–14. Khóa mẫu vẫn chuẩn hóa theo tên để xuất/đối chiếu. Chỉ dựng lại thứ tự khi initial scan hoặc re-scan; AUUB thay đổi trong batch mới không đổi cấu trúc cây đang cập nhật.
+
+Để bảo toàn số thực, terminal tính utility theo thứ tự chuẩn hóa cũ. Chỉ dùng tổng cộng theo đường đi khi external utility đều bằng 1, internal utility đều là số nguyên và TU tích lũy < 2^52; miền này bảo đảm các tổng nguyên dương biểu diễn chính xác. Nếu có số thập phân hoặc vượt miền an toàn thì quay về phép cộng chuẩn hóa. Không thay công thức AU/MAU hoặc quyết định re-scan.
+
+Benchmark so với revision 84eba7e: tổng hợp 3.000 giao dịch, Su=30%, Sl=1%, 10 warm-up + 9 lượt, không re-scan: tổng median 82,32 → 82,55 ms; DB1 6,38 → 6,73 ms; DB2 6,67 → 6,18 ms. SHA-256 toàn bộ mẫu/utility/phân loại khớp. **Chưa chứng minh tăng tốc tổng thể**; thay đổi giữ cấu trúc theo phương pháp bài báo, không quảng bá một tỷ lệ tăng tốc. Kiểm thử bổ sung kiểm tra bit số thực sau cập nhật trên cây đổi thứ tự, gồm utility gần 2^52.

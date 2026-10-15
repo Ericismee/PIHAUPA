@@ -10,11 +10,12 @@ public class OptimizationBench {
    if(total==0){row--;continue;} data.append(items).append(':').append(total).append(':').append(values).append('\n');
   }
   InputData input=ArchiveDatasetReader.readTransactionsText(args.length>2?java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(args[2])):new StringReader(data.toString()),args.length>2?args[2]:"seed71352",args.length>0?Double.parseDouble(args[0]):.04,args.length>1?Double.parseDouble(args[1]):.025,x->{});
-  ArrayList<Double> times=new ArrayList<>();AnalysisReport report=null;
+  ArrayList<Double> times=new ArrayList<>();List<List<Double>> batchTimes=new ArrayList<>();AnalysisReport report=null;
   int warmups=Integer.getInteger("bench.warmups",2), repetitions=Integer.getInteger("bench.repetitions",5);
-  for(int i=0;i<warmups+repetitions;i++){long start=System.nanoTime();report=AnalysisReport.run(input);double ms=(System.nanoTime()-start)/1e6;if(i>=warmups)times.add(ms);}
+  for(int i=0;i<warmups+repetitions;i++){long start=System.nanoTime();report=AnalysisReport.run(input);double ms=(System.nanoTime()-start)/1e6;if(i>=warmups){times.add(ms);for(int b=0;b<report.batches().size();b++){if(batchTimes.size()<=b)batchTimes.add(new ArrayList<>());batchTimes.get(b).add(report.batches().get(b).elapsedMs());}}}
   Collections.sort(times);
   System.out.println("medianMs="+times.get(times.size()/2)+";samples="+times+";visited="+report.stats().patternsVisited()+";joins="+report.stats().combinedNodes());
+  for(int b=0;b<batchTimes.size();b++){Collections.sort(batchTimes.get(b));System.out.println("batch="+report.batches().get(b).name()+";rescan="+report.batches().get(b).rescanTriggered()+";medianMs="+batchTimes.get(b).get(batchTimes.get(b).size()/2));}
   StringBuilder signature=new StringBuilder();
   for(var batch:report.batches()){
    java.util.stream.Stream.concat(batch.largePatterns().stream(),batch.preLargePatterns().stream()).sorted(java.util.Comparator.comparing(PatternResult::displayName)).forEach(p->signature.append(batch.name()).append(p.items()).append(Double.toHexString(p.sumUtility())).append(p.type()));
