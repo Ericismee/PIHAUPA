@@ -16,6 +16,7 @@ public final class PiHaupaMiner {
     private java.util.function.Consumer<String> progress = ignored -> {};
     private long lastProgressNanos;
     private double[] transactionMaximums;
+    private double[][] pairUpperBounds;
     private final boolean earlyJoinBounds = Boolean.getBoolean("pihaupa.earlyJoin");
     private boolean allIntegerUtilities = true;
     public void setProgress(java.util.function.Consumer<String> progress) { this.progress = progress; }
@@ -207,21 +208,57 @@ public final class PiHaupaMiner {
         globalAuub.forEach((item, bound) -> {
             if (bound >= lower) byItem.put(item, new PiNode(item));
         });
+        // Bộ lọc cặp thử nghiệm: chỉ dùng phép cộng chính xác và bảng kích thước nhỏ.
+        // pairUpperBounds[a][b] = tổng MU(T) trên giao dịch chứa cả a,b.
+        String pairMode = System.getProperty("pihaupa.pairFilter", "auto");
+        boolean pairFilter = !pairMode.equalsIgnoreCase("false") && unitExternalUtilities
+                && allIntegerUtilities && totalTransactionUtility < 0x1.0p52 && byItem.size() <= 256
+                && (pairMode.equalsIgnoreCase("true") || byItem.size() >= 32);
+        if (pairFilter) {
+            long preparationWork = 0;
+            for (Transaction transaction : transactions) {
+                checkCancelled();
+                long width = Math.min(byItem.size(), transaction.internalUtilities().size());
+                preparationWork += width * (width - 1) / 2;
+                if (preparationWork > 100_000_000L) { pairFilter = false; break; }
+            }
+        }
+        final boolean usePairFilter = pairFilter;
+        pairUpperBounds = pairFilter ? new double[byItem.size()][byItem.size()] : null;
+        if (pairFilter) reportProgress("03 · Chuẩn bị cận cặp cho " + byItem.size()
+                + " item; loại phép ghép có cận dưới ngưỡng PRE-LARGE.");
+        int pairPosition = 0;
+        for (PiNode node : byItem.values()) node.pairPosition = pairPosition++;
+        int[] pairItems = pairFilter ? new int[byItem.size()] : null;
+        int[] pairCount = new int[1];
         transactionMaximums = earlyJoinBounds ? new double[transactions.size()] : null;
         int transactionIndex = 0;
         for (Transaction transaction : transactions) {
             checkCancelled();
             final int position = transactionIndex;
+            pairCount[0] = 0;
             if (earlyJoinBounds) transactionMaximums[position] = unitExternalUtilities ? transaction.unitMaximumUtility()
                     : transaction.maximumUtility(externalUtilities);
             transaction.forEachUtility((item,internalUtility) -> {
                 PiNode node = byItem.get(item);
                 if (node == null) return;
+                if (usePairFilter) pairItems[pairCount[0]++] = node.pairPosition;
                 double utility = unitExternalUtilities ? internalUtility
                         : internalUtility * externalUtilities.get(item);
                 node.sumUtility += utility;
                 node.entries.add(new PiEntry(position, utility, 0.0, utility));
             });
+            if (pairFilter) {
+                double maximum = transaction.unitMaximumUtility();
+                for (int a = 0; a < pairCount[0]; a++) {
+                    if ((a & 31) == 0) checkCancelled();
+                    for (int b = a + 1; b < pairCount[0]; b++) {
+                        int x = Math.min(pairItems[a], pairItems[b]);
+                        int y = Math.max(pairItems[a], pairItems[b]);
+                        pairUpperBounds[x][y] += maximum;
+                    }
+                }
+            }
             transactionIndex++;
         }
         List<PiNode> nodes = new ArrayList<>(byItem.values());
@@ -349,6 +386,13 @@ public final class PiHaupaMiner {
 
     private PiNode combine(PiNode left, PiNode right, double lower) {
         combinedNodes++;
+        // Mọi siêu mẫu chứa hai item cuối đều có AU ≤ cận cặp này.
+        // Loại trước khi cấp phát entry; không dùng AU hiện tại để loại siêu mẫu.
+        if (pairUpperBounds != null && pairUpperBounds[Math.min(left.pairPosition, right.pairPosition)]
+                [Math.max(left.pairPosition, right.pairPosition)] < lower) {
+            earlyJoinsPruned++;
+            return null;
+        }
         // AUUB chặn mọi siêu mẫu. Không cấp phát/ghép nếu cận đã dưới Sl×TU.
         // Dùng biên bảo thủ cho số thực; không loại mẫu chỉ vì AU hiện tại thấp.
         if (Math.min(left.auub, right.auub) < lower - Math.max(1.0, lower) * 1e-12) {
@@ -356,6 +400,7 @@ public final class PiHaupaMiner {
             return null;
         }
         PiNode combined = new PiNode(right.item);
+        combined.pairPosition = right.pairPosition;
         combined.auub = Math.min(left.auub, right.auub);
         combined.maximumRemainingNumber = Math.min(left.maximumRemainingNumber, right.maximumRemainingNumber);
         // Cắt ghép rỗng bằng khoảng vị trí: không có giao dịch chung thì không có mẫu ghép.
@@ -573,6 +618,7 @@ public final class PiHaupaMiner {
 
     private static final class PiNode {
         private final String item;
+        private int pairPosition;
         private List<PiEntry> entries = new ArrayList<>();
         private double sumUtility;
         private double auub;

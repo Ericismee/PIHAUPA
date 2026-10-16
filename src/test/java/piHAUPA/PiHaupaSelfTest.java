@@ -21,6 +21,7 @@ public final class PiHaupaSelfTest {
         verifiesUnsortedNonNumericTransactionIds();
         verifiesRandomSmallStreamsAgainstBruteForce();
         verifiesDecimalPreLargeAgainstBruteForce();
+        verifiesPairFilterAgainstBruteForce();
         verifiesManagedTrieOnWideIncrement();
         verifiesTightRescanBoundaryAndAccumulation();
         verifiesPatternClassificationAtThresholds();
@@ -134,6 +135,38 @@ public final class PiHaupaSelfTest {
             Map<String, Double> expected = bruteForceLarge(rows, external, lower);
             require(retained.keySet().equals(expected.keySet()), "Decimal PRE-LARGE set mismatch: " + trial);
             expected.forEach((key, value) -> require(close(value, retained.get(key)), "Decimal AU mismatch: " + key));
+        }
+    }
+
+    /** Cận cặp phải giữ cả LARGE và PRE-LARGE; xét cả cặp không đồng xuất hiện. */
+    private static void verifiesPairFilterAgainstBruteForce() {
+        String previous = System.getProperty("pihaupa.pairFilter");
+        System.setProperty("pihaupa.pairFilter", "true");
+        try {
+            Random random = new Random(7135216L);
+            for (int trial = 0; trial < 20; trial++) {
+                Map<String, Double> external = new LinkedHashMap<>();
+                for (int i = 0; i < 8; i++) external.put("P" + i, 1.0);
+                List<Transaction> rows = new ArrayList<>();
+                for (int row = 0; row < 80; row++) {
+                    Map<String, Double> values = new LinkedHashMap<>();
+                    for (String item : external.keySet()) if (random.nextBoolean())
+                        values.put(item, (double) (1 + random.nextInt(20)));
+                    if (values.isEmpty()) values.put("P0", 1.0);
+                    rows.add(new Transaction("P" + row, values));
+                }
+                double lower = 0.02 + trial * 0.003;
+                BatchResult actual = new PiHaupaMiner(external, lower * 2, lower)
+                        .processBatch(new Batch("DB0", rows));
+                Map<String, Double> retained = toMap(actual.largePatterns());
+                retained.putAll(toMap(actual.preLargePatterns()));
+                Map<String, Double> expected = bruteForceLarge(rows, external, lower);
+                require(retained.keySet().equals(expected.keySet()), "Pair-filter set mismatch: " + trial);
+                expected.forEach((key, value) -> require(close(value, retained.get(key)), "Pair-filter AU mismatch: " + key));
+            }
+        } finally {
+            if (previous == null) System.clearProperty("pihaupa.pairFilter");
+            else System.setProperty("pihaupa.pairFilter", previous);
         }
     }
 

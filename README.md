@@ -452,6 +452,12 @@ BUSY vẫn là phản hồi hợp lệ của API cho các client gửi đồng t
 
 ### Giảm bộ nhớ sống trong tìm kiếm DFS (16/10/2026)
 
+**Bộ lọc cặp item:** `C(a,b)=Σ MU(T)` trên các giao dịch chứa cả a,b. Với mọi mẫu P chứa cặp a,b, AU(P)≤C(a,b), vì trung bình utility của P trong mỗi giao dịch không vượt MU(T). Khi C(a,b)<Sₗ×TU(DB), bỏ phép ghép trước khi tạo PIHAUP-List con. Cận được xây lại trên toàn dữ liệu mỗi lần initial scan/re-scan; không làm thay đổi điều kiện quét lại hay cập nhật PT.
+
+Chế độ mặc định `-Dpihaupa.pairFilter=auto`: chỉ bật cho 32–256 item ứng viên, EU=1, utility nguyên dương, TU<2^52 (cộng chính xác), và ước lượng không quá 100 triệu lượt cập nhật cặp mỗi lần dựng list. Ngoài phạm vi này dùng thuật toán cũ; đó là lựa chọn đường thực thi, không cắt dữ liệu/kết quả. `false` tắt để đối chứng; `true` cho phép thử cả tập dưới 32 item nhưng vẫn giữ giới hạn an toàn còn lại. Bảng double tối đa khoảng 512 KiB, không lưu giao dịch theo từng cặp.
+
+Đối chứng toàn tệp NewConnects, Sᵤ=0,035/Sₗ=0,03, JVM heap 512 MiB, 1 warm-up + 3 lượt, cùng source với bộ lọc bật/tắt: median 4.594,43 → 3.820,45 ms (giảm 16,8%, gồm cả xây bảng cận). Số mẫu đã xét 1.966 → 1.899; số lần gọi ghép 1.890 giữ nguyên, nhưng một số lần trả về sớm trước khi duyệt entry. SHA-256 toàn bộ HAUP/PRE-LARGE từng batch khớp. Fixture 16 item/3.000 giao dịch ở 2%/1% cho chênh lệch gần bằng không khi ép bật; không suy rộng mức giảm sang lượt ngưỡng thấp nhiều giờ. Kiểm thử vét cạn thêm 20 bộ utility nguyên, đối chiếu cả HAUP và PRE-LARGE.
+
 **Kiểm tra cận theo chi phí:** kiểm tra `ExtensionPlan.canReach` (duyệt item) trước MAU (duyệt entry giao dịch). MAU chỉ quyết định có mở rộng hay không; các số hạng không âm, nên khi tổng đã đạt Sₗ×TU có thể dừng kiểm tra. Kiểm tra theo khối 64 entry để giảm chi phí nhánh; khi chưa đạt ngưỡng vẫn cộng đến hết, giữ nguyên thứ tự tính.
 
 Đo bổ sung so với commit `0364ad5`, cùng quy trình 1 warm-up + 3 lượt: NewConnects 3,5%/3%, heap 512 MiB, median 4.797,31 → 4.593,53 ms (giảm khoảng 4,2%); fixture utility số thực 3.000 giao dịch/16 item, 2%/1%, heap 256 MiB: 256,21 → 241,90 ms (giảm khoảng 5,6%). SHA-256 kết quả từng batch khớp. Các mức chênh lệch nhỏ chịu ảnh hưởng lượt nền; không cộng phần trăm giữa các lần benchmark và không suy ra thời gian của ngưỡng đang chạy. Kiểm thử bổ sung vét cạn 24 bộ dữ liệu số thực đối chiếu cả HAUP và PRE-LARGE, EU=1 và EU=1,7.
