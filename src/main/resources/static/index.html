@@ -176,7 +176,7 @@
               <label for="threshold-mode">Mức ngưỡng</label>
               <select id="threshold-mode">
                 <option value="reference">01 · Tham chiếu — ngưỡng cao</option>
-                <option value="overview">02 · Tổng quan — Khuyến nghị · 70% / 50% r</option>
+                <option value="overview">02 · Tổng quan · 70% / 50% r</option>
                 <option value="extended">03 · Mở rộng — khảo sát thêm · 50% / 30% r</option>
                 <option value="deep">04 · Ngưỡng thấp — khảo sát sâu · 25% / 10% r</option>
                 <option value="custom">05 · Tự nhập — chủ động Sᵤ / Sₗ</option>
@@ -184,60 +184,66 @@
               <p id="threshold-note" class="subtle" aria-live="polite"></p>
             </div>
             <details id="run-options" class="run-options">
-              <summary>Tùy chọn & giải thích</summary>
+              <summary>Cấu hình thực nghiệm</summary>
               <div class="options-body">
-                <p id="run-subtitle">Phân tích dữ liệu mẫu từ bài báo gốc.</p>
-                <p id="source-hint">9 giao dịch · 6 item · 3 batch theo bài báo</p>
-                <p id="preset-hint">Ngưỡng ví dụ bài báo · 0,23 = 23%.</p>
-                <label class="check"
-                  ><input id="compare" type="checkbox" />Đối chiếu Original / Tight · JVM
-                  riêng</label
-                >
-                <label class="repeat-field" for="repeats"
-                  >Số lượt đo
-                  <select id="repeats">
-                    <option value="1">1 lượt · chạy nhanh</option>
-                    <option value="3">3 lượt + 1 warm-up</option>
-                    <option value="5">5 lượt + 1 warm-up</option>
-                  </select></label
-                >
-                <label class="repeat-field" for="size-percent"
-                  >Kích thước dữ liệu
-                  <select id="size-percent">
-                    <option value="20">20% đầu tệp</option>
-                    <option value="25">25% đầu tệp</option>
-                    <option value="40">40% đầu tệp</option>
-                    <option value="60">60% đầu tệp</option>
-                    <option value="80">80% đầu tệp</option>
-                    <option value="50">50% đầu tệp</option>
-                    <option value="75">75% đầu tệp</option>
-                    <option value="100" selected>100% · toàn bộ</option>
-                  </select>
-                </label>
-                <button type="button" id="run-size-suite" class="button">
-                  Thực nghiệm kích thước · 20 → 40 → 60 → 80 → 100%
-                </button>
-                <p class="subtle">
-                  Giữ nguyên Sᵤ/Sₗ và số lượt đo. Các mẫu nhỏ lấy giao dịch đầu theo thứ tự gốc,
-                  chia lại DB0/DB1/DB2. Vẫn đọc/kiểm tra toàn tệp; thời gian đọc không đại diện chi
-                  phí đọc riêng phần mẫu. Đây là thực nghiệm hiệu năng, không phải testcase khẳng
-                  định kết quả đúng.
-                </p>
-                <label class="repeat-field" for="insertion-steps"
-                  >Chia batch
-                  <select id="insertion-steps">
-                    <option value="0">Mặc định của nguồn</option>
-                    <option value="9">OR + 9 lần chèn · như Fig. 8–9</option>
-                  </select>
-                </label>
-                <label class="repeat-field" for="original-ratio"
-                  >OR ban đầu
-                  <select id="original-ratio">
-                    <option value="0.82">82% · dữ liệu dày</option>
-                    <option value="0.955">95,5% · kịch bản Bms-pos</option>
-                    <option value="0.998">99,8% · kịch bản Chainstore</option>
-                  </select>
-                </label>
+                <div class="config-grid">
+                  <label class="config-field" for="repeats"
+                    >Số lượt đo<select id="repeats">
+                      <option value="1">1 lượt</option>
+                      <option value="3">3 lượt + 1 warm-up</option>
+                      <option value="5">5 lượt + 1 warm-up</option>
+                    </select></label
+                  >
+                  <label class="config-field" for="size-percent"
+                    >Dữ liệu sử dụng<select id="size-percent">
+                      <option value="20">20%</option>
+                      <option value="25">25%</option>
+                      <option value="40">40%</option>
+                      <option value="50">50%</option>
+                      <option value="60">60%</option>
+                      <option value="75">75%</option>
+                      <option value="80">80%</option>
+                      <option value="100" selected>100% · toàn bộ</option>
+                    </select></label
+                  >
+                  <label class="config-field" for="insertion-steps"
+                    >Chia batch<select id="insertion-steps">
+                      <option value="0">Mặc định của nguồn</option>
+                      <option value="9">OR + 9 lần chèn</option>
+                    </select></label
+                  >
+                  <label class="config-field" for="original-ratio"
+                    >OR · tỷ lệ DB0<select id="original-ratio">
+                      <option value="0.82">82% · dữ liệu dày</option>
+                      <option value="0.955">95,5% · Bms-pos</option>
+                      <option value="0.998">99,8% · Chainstore</option>
+                    </select></label
+                  >
+                </div>
+                <div class="config-actions">
+                  <label class="check"
+                    ><input id="compare" type="checkbox" /><span
+                      >Đối chiếu Original / Tight<small>Chạy thêm hai JVM riêng</small></span
+                    ></label
+                  ><button type="button" id="run-size-suite" class="button">
+                    Đo dãy 20 → 100%
+                  </button>
+                </div>
+                <details class="config-help">
+                  <summary>Giải thích cấu hình</summary>
+                  <p id="run-subtitle">Phân tích dữ liệu mẫu từ bài báo gốc.</p>
+                  <p id="source-hint">9 giao dịch · 6 item · 3 batch theo bài báo</p>
+                  <p id="preset-hint">Ngưỡng ví dụ bài báo · 0,23 = 23%.</p>
+                  <p>
+                    Dãy kích thước: 20/40/60/80/100%, giữ ngưỡng và số lượt đo. Lấy phần đầu theo
+                    thứ tự gốc; vẫn đọc và kiểm tra toàn tệp. Đây là thực nghiệm hiệu năng, không
+                    phải testcase.
+                  </p>
+                  <p>
+                    OR chỉ áp dụng khi chọn 9 lần chèn. Đo lặp và đối chiếu tăng tổng số lượt khai
+                    phá; 1 lượt không đảm bảo chạy nhanh khi ngưỡng thấp.
+                  </p>
+                </details>
                 <div class="metric-details">
                   <span id="live-read">Đọc: —</span><span id="live-algorithm">Thuật toán: —</span
                   ><span id="live-heap-detail">Đỉnh heap lấy mẫu: —</span>
@@ -269,6 +275,7 @@
           <p class="subtle" id="run-progress-note">
             Tiến độ theo mốc xử lý, không phải phần trăm thời gian.
           </p>
+          <p id="run-job-source" class="subtle"></p>
           <p id="run-workload" class="run-workload" hidden></p>
           <p id="current-operation" role="status" aria-live="polite">Chưa chạy.</p>
           <pre id="progress-log" aria-label="Nhật ký xử lý theo thời gian"></pre>

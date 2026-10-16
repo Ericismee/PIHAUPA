@@ -156,6 +156,7 @@ function updateRunProgress(status) {
       (Number(workload[1]) >= 100000
         ? '. Đang mở rộng nhiều ứng viên; số giữ trong PT không phải số HAUP cuối. Chưa xác định thời gian còn lại.'
         : '');
+  $('run-job-source').textContent = status.source ? 'Lượt xử lý: ' + status.source : '';
   const percent = status.progressPercent;
   const bar = $('run-progress-bar');
   const terminal = ['FAILED', 'CANCELLED'].includes(status.state);
@@ -252,7 +253,7 @@ function setBusy(busy) {
   $('size-percent').disabled = busy;
   $('run-size-suite').disabled = busy || sizeSuiteRunning;
   $('insertion-steps').disabled = busy;
-  $('original-ratio').disabled = busy;
+  $('original-ratio').disabled = busy || $('insertion-steps').value === '0';
   $('cancel-run').hidden = !busy;
   $('cancel-run').disabled = !currentJob;
   updatePending();
@@ -686,7 +687,10 @@ $('run-size-suite').onclick = async () => {
   }
 };
 $('size-percent').addEventListener('change', updatePending);
-$('insertion-steps').addEventListener('change', updatePending);
+$('insertion-steps').addEventListener('change', () => {
+  $('original-ratio').disabled = state.busy || $('insertion-steps').value === '0';
+  updatePending();
+});
 $('original-ratio').addEventListener('change', updatePending);
 $('export-zip').addEventListener('click', () => download('zip'));
 $('export').addEventListener('click', () => download('csv'));

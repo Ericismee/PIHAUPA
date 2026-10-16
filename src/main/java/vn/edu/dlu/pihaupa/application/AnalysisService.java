@@ -186,7 +186,12 @@ public final class AnalysisService implements AutoCloseable {
         public volatile Map<String,Double> external;
         private final ArrayDeque<String> lines = new ArrayDeque<>();
         Job(String id, String source) { this.id=id; this.source=source; }
-        private void fail(Throwable cause){AppError info=AppError.from(cause);error=info.message();errorCode=info.code();errorAction=info.action();}
+        private void fail(Throwable cause){AppError info=AppError.from(cause);error=info.message();errorCode=info.code();errorAction=info.action();
+            if(cause instanceof OutOfMemoryError && "REPORTING".equals(phase)){
+                error="Khai phá đã hoàn tất nhưng JVM hết heap khi tổng hợp/lưu báo cáo. Báo cáo chưa được lưu đầy đủ.";
+                errorAction="Cần báo cáo phân trang/xuất tuần tự hoặc heap phù hợp. Không tự chạy lại cùng cấu hình; thời gian khai phá không phải thời gian tạo báo cáo.";
+            }
+        }
         synchronized void log(String line) { checkCancelled(); if (line.startsWith("TIGHT: xong ")) completedSteps++; if (lines.size() >= 500) lines.removeFirst(); lines.addLast(String.format(java.util.Locale.ROOT,"[+%.2f s] %s",(System.nanoTime()-startedNanos)/1e9,line));
             var matcher=java.util.regex.Pattern.compile("đã đọc ([0-9]+) giao dịch").matcher(line.toLowerCase(java.util.Locale.ROOT));if(matcher.find())rowsRead=Math.max(rowsRead,Long.parseLong(matcher.group(1)));
         }
