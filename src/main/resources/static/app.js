@@ -1,6 +1,17 @@
 import { chart, colors, esc, num } from './charts.js';
 import { request } from './api.js';
-import { icon, badge, card, kpi, notice, last, action, table, tr } from './ui-components.js';
+import {
+  icon,
+  badge,
+  card,
+  kpi,
+  notice,
+  last,
+  action,
+  table,
+  tr,
+  patternCount,
+} from './ui-components.js';
 import { auEvidence, finalConclusion, verificationBadges, manifestPanel } from './report-ui.js';
 import { notifyStatus } from './notifications.js';
 
@@ -458,7 +469,7 @@ async function observeJob(job, configuration = null) {
         ' · ' +
         num(result.report.transactionCount, 0) +
         ' giao dịch · ' +
-        last(result.report).largePatterns.length +
+        patternCount(last(result.report), 'LARGE') +
         ' HAUP.',
       'success',
     );
@@ -765,6 +776,7 @@ function navigate() {
 window.addEventListener('hashchange', navigate);
 
 function render() {
+  if (state.current?.report?.patternsLimited) state.current.bulk = true;
   const analysis = state.page === 'overview';
   $('run-panel').hidden = !analysis;
   $('status').hidden = !analysis || !$('status').textContent;
@@ -805,7 +817,14 @@ function renderEmpty() {
 
 function reportNote() {
   const c = state.current;
-  return `<div class="result-note"><span>${badge('Đã hoàn tất', 'green')} <strong>${esc(c.source)}</strong> · ${esc(new Date(c.createdAt).toLocaleString('vi-VN'))}</span><span>Sᵤ = ${num(c.report.upperThreshold, 17)} · Sₗ = ${num(c.report.lowerThreshold, 17)} · ${num(c.report.batchCount, 0)} batch</span></div>`;
+  return (
+    (c.bulk
+      ? notice(
+          'Báo cáo lớn: số đếm là toàn bộ kết quả. Biểu đồ dùng preview; bảng mẫu đọc phân trang từ đĩa. ZIP chứa toàn bộ mẫu, không cắt kết quả khai phá.',
+        )
+      : '') +
+    `<div class="result-note"><span>${badge('Đã hoàn tất', 'green')} <strong>${esc(c.source)}</strong> · ${esc(new Date(c.createdAt).toLocaleString('vi-VN'))}</span><span>Sᵤ = ${num(c.report.upperThreshold, 17)} · Sₗ = ${num(c.report.lowerThreshold, 17)} · ${num(c.report.batchCount, 0)} batch</span></div>`
+  );
 }
 
 function renderOverview(target) {
@@ -821,12 +840,12 @@ function renderOverview(target) {
         [
           {
             name: 'LARGE / HAUP',
-            values: r.batches.map((b) => b.largePatterns.length),
+            values: r.batches.map((b) => patternCount(b, 'LARGE')),
             color: colors.blue,
           },
           {
             name: 'PRE-LARGE',
-            values: r.batches.map((b) => b.preLargePatterns.length),
+            values: r.batches.map((b) => patternCount(b, 'PRE_LARGE')),
             color: colors.amber,
           },
         ],
@@ -884,7 +903,7 @@ function renderBatches(target) {
           num(b.totalTransactionUtility),
           num(b.minUtilUpper),
           num(b.minUtilLower),
-          b.largePatterns.length + ' / ' + b.preLargePatterns.length,
+          patternCount(b, 'LARGE') + ' / ' + patternCount(b, 'PRE_LARGE'),
           action(b),
         ]),
       ),
@@ -1034,28 +1053,54 @@ function renderAnalysis() {
   renderPatterns($('patterns-content'));
 }
 
-function renderPatterns(target) {
+let patternRequest = 0;
+async function renderPatterns(target, remote = null) {
+  if (state.current.bulk && !remote) {
+    const current = state.current,
+      token = ++patternRequest;
+    const query = new URLSearchParams({
+      batch: state.batchIndex,
+      type: state.patternType,
+      search: state.patternSearch,
+      page: state.patternPage,
+    });
+    target.innerHTML = '<p class="notice">Đang đọc trang mẫu từ đĩa…</p>';
+    try {
+      const data = await request('/api/runs/' + current.id + '/patterns?' + query, {
+        timeoutMs: 120000,
+      });
+      if (token === patternRequest && state.current === current)
+        return renderPatterns(target, data);
+    } catch (error) {
+      if (token === patternRequest) target.innerHTML = notice(esc(error.message));
+    }
+    return;
+  }
   const r = state.current.report,
     b = r.batches[Math.min(state.batchIndex, r.batches.length - 1)],
-    patterns = [...b.largePatterns, ...b.preLargePatterns]
-      .filter(
-        (p) =>
-          (state.patternType === 'ALL' || p.type === state.patternType) &&
-          p.name.toLowerCase().includes(state.patternSearch.toLowerCase()),
-      )
-      .sort((a, b) => b.averageUtility - a.averageUtility);
+    patterns = remote
+      ? remote.patterns
+      : [...b.largePatterns, ...b.preLargePatterns]
+          .filter(
+            (p) =>
+              (state.patternType === 'ALL' || p.type === state.patternType) &&
+              p.name.toLowerCase().includes(state.patternSearch.toLowerCase()),
+          )
+          .sort((a, b) => b.averageUtility - a.averageUtility);
   const size = 25,
-    pages = Math.max(1, Math.ceil(patterns.length / size));
+    pages = Math.max(1, Math.ceil((remote?.total ?? patterns.length) / size));
   state.patternPage = Math.min(state.patternPage, pages - 1);
-  const totalPatterns = b.largePatterns.length + b.preLargePatterns.length;
+  const totalPatterns = patternCount(b, 'LARGE') + patternCount(b, 'PRE_LARGE');
   const emptyMessage =
     totalPatterns > 0
       ? 'Không có mẫu khớp bộ lọc. Xóa từ khóa hoặc chọn Tất cả loại mẫu để xem lại.'
       : `Đã xử lý ${num(b.cumulativeTransactionCount, 0)} giao dịch đến ${b.name}. Không có mẫu đang quản lý đạt ngưỡng ở lượt này (Sᵤ=${num(r.upperThreshold, 8)}, Sₗ=${num(r.lowerThreshold, 8)}). Đây là kết quả rỗng, không phải thiếu dữ liệu đầu vào.`;
-  const shown = patterns.slice(state.patternPage * size, (state.patternPage + 1) * size),
-    top = patterns.slice(0, 12);
+  const shown = remote
+      ? patterns
+      : patterns.slice(state.patternPage * size, (state.patternPage + 1) * size),
+    top = remote ? remote.top : patterns.slice(0, 12);
   target.innerHTML =
-    `<div class="toolbar"><label class="subtle" for="batch-select">Batch</label><select id="batch-select">${r.batches.map((b, i) => `<option value="${i}" ${i === state.batchIndex ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select><input id="pattern-search" aria-label="Tìm mẫu theo item" placeholder="Tìm mẫu theo item…" value="${esc(state.patternSearch)}"><select id="pattern-type" aria-label="Loại mẫu"><option value="ALL">Tất cả loại mẫu</option><option value="LARGE" ${state.patternType === 'LARGE' ? 'selected' : ''}>LARGE / HAUP</option><option value="PRE_LARGE" ${state.patternType === 'PRE_LARGE' ? 'selected' : ''}>PRE-LARGE</option></select></div>` +
+    `<div class="toolbar"><label class="subtle" for="batch-select">Batch</label><select id="batch-select">${r.batches.map((b, i) => `<option value="${i}" ${i === state.batchIndex ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select><input id="pattern-search" aria-label="Tìm mẫu theo item" placeholder="${state.current.bulk ? 'Tìm mẫu · nhấn Enter để tìm trên đĩa' : 'Tìm mẫu theo item…'}" value="${esc(state.patternSearch)}"><select id="pattern-type" aria-label="Loại mẫu"><option value="ALL">Tất cả loại mẫu</option><option value="LARGE" ${state.patternType === 'LARGE' ? 'selected' : ''}>LARGE / HAUP</option><option value="PRE_LARGE" ${state.patternType === 'PRE_LARGE' ? 'selected' : ''}>PRE-LARGE</option></select></div>` +
     card(
       'AU(P) của mẫu đang xem',
       'Tối đa 12 mẫu có AU cao nhất · ' + esc(b.name),
@@ -1081,7 +1126,7 @@ function renderPatterns(target) {
         ]),
       ),
       'Bảng · Mẫu trong PT — LARGE / PRE-LARGE',
-    )}<div class="table-footer"><span>${patterns.length ? num(patterns.length, 0) + ' mẫu · Trang ' + (state.patternPage + 1) + '/' + pages : '0 mẫu · đã xử lý dữ liệu'}</span><div><button class="button" id="previous" ${patterns.length === 0 ? 'hidden' : ''} ${state.patternPage === 0 ? 'disabled' : ''}>Trước</button> <button class="button" id="next" ${patterns.length === 0 ? 'hidden' : ''} ${state.patternPage >= pages - 1 ? 'disabled' : ''}>Sau</button></div></div></section>`;
+    )}<div class="table-footer"><span>${patterns.length ? num(remote?.total ?? patterns.length, 0) + ' mẫu · Trang ' + (state.patternPage + 1) + '/' + pages : '0 mẫu · đã xử lý dữ liệu'}</span><div><button class="button" id="previous" ${patterns.length === 0 ? 'hidden' : ''} ${state.patternPage === 0 ? 'disabled' : ''}>Trước</button> <button class="button" id="next" ${patterns.length === 0 ? 'hidden' : ''} ${state.patternPage >= pages - 1 ? 'disabled' : ''}>Sau</button></div></div></section>`;
   $('batch-select').onchange = (e) => {
     state.batchIndex = Number(e.target.value);
     state.patternPage = 0;
@@ -1092,11 +1137,12 @@ function renderPatterns(target) {
     state.patternPage = 0;
     renderPatterns(target);
   };
-  $('pattern-search').oninput = (e) => {
+  $('pattern-search')[state.current.bulk ? 'onchange' : 'oninput'] = async (e) => {
     const start = e.target.selectionStart;
     state.patternSearch = e.target.value;
     state.patternPage = 0;
-    renderPatterns(target);
+    await renderPatterns(target);
+    if (!$('pattern-search')) return;
     $('pattern-search').focus();
     $('pattern-search').setSelectionRange(start, start);
   };
@@ -1110,20 +1156,36 @@ function renderPatterns(target) {
   };
 }
 function renderResourceMeasurements(c) {
-  const resources = c.measurement.resources;
+  const rawResources = c.measurement.resources;
+  const resources = rawResources
+    ? {
+        ...rawResources,
+        sampleCount: rawResources.sampleCount ?? (rawResources.samples || []).length,
+        samples: (rawResources.samples || []).slice(-600),
+      }
+    : null;
   if (!resources)
     return notice('Lượt cũ chưa có số đo RAM; chạy lại để cập nhật các thẻ số liệu phía trên.');
   const value = (v) => (v == null ? 'Chưa đo' : num(v));
   return card(
     'Chi tiết số đo',
     'Runtime: ms · bộ nhớ: MiB. Các lượt dùng chung JVM.',
-    table(
-      ['Lượt đo', 'Runtime (ms)', 'Đỉnh heap quan sát (MiB)'],
-      (c.measurement.runMeasurements || []).map((r, i) =>
-        tr([i + 1, num(r.runtimeMs), num(r.heapPeakMiB)]),
-      ),
-      'Bảng · Runtime và heap từng lượt',
-    ) +
+    (resources.sampleCount > (resources.samples || []).length
+      ? notice(
+          'Hiển thị ' +
+            resources.samples.length +
+            ' mẫu thiết bị gần nhất trên ' +
+            resources.sampleCount +
+            '. Toàn bộ số đo nằm trong measurements.json của ZIP.',
+        )
+      : '') +
+      table(
+        ['Lượt đo', 'Runtime (ms)', 'Đỉnh heap quan sát (MiB)'],
+        (c.measurement.runMeasurements || []).map((r, i) =>
+          tr([i + 1, num(r.runtimeMs), num(r.heapPeakMiB)]),
+        ),
+        'Bảng · Runtime và heap từng lượt',
+      ) +
       `<details class="manifest-panel"><summary>Số đo bộ nhớ theo thời điểm · ${(resources.samples || []).length} mẫu</summary>${table(
         [
           'Thời điểm (s)',
@@ -1184,7 +1246,7 @@ function renderSizeMeasurements() {
           c.measurement.resources?.processResidentMiBPeak == null
             ? 'Chưa đo'
             : num(c.measurement.resources.processResidentMiBPeak),
-          last(c.report).largePatterns.length,
+          patternCount(last(c.report), 'LARGE'),
         ]),
       ),
       'Bảng · Các trường hợp kích thước',
@@ -1316,7 +1378,7 @@ function experimentHistoryCharts(c) {
                 num(x.report.elapsedMs / 1000, 3),
                 num(x.measurement.heapPeakObservedMb * 1.048576),
                 num(x.report.stats.rescanCount, 0),
-                num(last(x.report).largePatterns.length, 0),
+                num(patternCount(last(x.report), 'LARGE'), 0),
               ]),
             ),
             'Bảng · ' + title,
@@ -1333,7 +1395,7 @@ function renderMeasurements() {
     m = c.measurement;
   $('content').innerHTML =
     reportNote() +
-    `<div class="kpi-grid">${kpi('Thời gian chạy · median', num(r.elapsedMs / 1000), (m.repetitions || 1) + ' lượt · không gồm đọc tệp', 'clock', 's')}${kpi('Bộ nhớ sử dụng', num(m.heapPeakObservedMb * 1.048576), 'JVM heap · đỉnh lấy mẫu', 'measurements', 'MB')}${kpi('Số lần re-scan', num(r.stats.rescanCount, 0), 'Không tính quét ban đầu DB0', 'rescan')}${kpi('HAUP cuối', num(last(r).largePatterns.length, 0), 'AU(P) ≥ Sᵤ × TU(DB)', 'patterns')}</div>` +
+    `<div class="kpi-grid">${kpi('Thời gian chạy · median', num(r.elapsedMs / 1000), (m.repetitions || 1) + ' lượt · không gồm đọc tệp', 'clock', 's')}${kpi('Bộ nhớ sử dụng', num(m.heapPeakObservedMb * 1.048576), 'JVM heap · đỉnh lấy mẫu', 'measurements', 'MB')}${kpi('Số lần re-scan', num(r.stats.rescanCount, 0), 'Không tính quét ban đầu DB0', 'rescan')}${kpi('HAUP cuối', num(patternCount(last(r), 'LARGE'), 0), 'AU(P) ≥ Sᵤ × TU(DB)', 'patterns')}</div>` +
     experimentHistoryCharts(c) +
     `<section class="device-panel"><div class="analysis-heading"><div><h2>Thiết bị & xử lý dữ liệu</h2><p>Số đo lấy mẫu; RAM toàn máy bao gồm ứng dụng khác.</p></div></div><dl class="device-numbers">${[
       ['Đọc + SHA-256', m.importMs, 'ms'],
@@ -1370,7 +1432,7 @@ function renderMeasurements() {
           num(x.report.elapsedMs / 1000, 3),
           num(x.measurement.heapPeakObservedMb * 1.048576),
           num(x.report.stats.rescanCount, 0),
-          num(last(x.report).largePatterns.length, 0),
+          num(patternCount(last(x.report), 'LARGE'), 0),
         ]),
       ),
     )}</section>` +
@@ -1414,7 +1476,7 @@ function renderMeasurements() {
         run.measurement.heapPeakObservedMb,
         run.measurement.resources?.processResidentMiBPeak,
         run.measurement.resources?.systemUsedMiBPeak,
-        last(run.report).largePatterns.length,
+        patternCount(last(run.report), 'LARGE'),
       ]),
     ];
     const url = URL.createObjectURL(

@@ -106,7 +106,11 @@ public final class AnalysisService implements AutoCloseable {
                 job.measurements=measurements;
                 job.measurementCsv="metric,value,unit\nimportMs,"+job.importMs+",ms\nalgorithmMs,"+report.elapsedNanos()/1e6+",ms\nthreadCpuMs,"+measurements.get("threadCpuMs")+",ms\nheapPeakObservedMb,"+report.peakMemoryBytes()/1048576.+",MiB\n";
                 job.manifest.put("haups",report.batches().get(report.batches().size()-1).largePatterns().size());job.manifest.put("rows",report.transactionCount());job.manifest.put("medianMs",report.elapsedNanos()/1e6);job.manifest.put("comparison",compare);job.manifest.put("comparisonIsolation",compare?"one-child-jvm-per-policy":"not-run");job.manifest.put("oracle",job.oracle);
-                job.result = "{\"id\":"+Json.encode(job.id)+",\"source\":"+Json.encode(job.source)
+                if(BulkReports.needed(report)) {
+                    job.log("Báo cáo lớn: ghi CSV/ZIP tuần tự; giao diện dùng số đếm đầy đủ và phân trang.");
+                    var bulk=RecoveryWriter.write(job);BulkReports.counts(bulk,report);
+                    job.result=BulkReports.payload(job,comparison,preview);
+                } else job.result = "{\"id\":"+Json.encode(job.id)+",\"source\":"+Json.encode(job.source)
                         +",\"createdAt\":"+Json.encode(job.createdAt)+",\"report\":"+report.toJson()
                         +",\"processLog\":"+Json.encode(job.logLines())+",\"manifest\":"+Json.encode(job.manifest)+",\"oracle\":"+Json.encode(job.oracle)+",\"measurement\":"+Json.encode(measurements)+",\"preview\":"+Json.encode(preview)
                         +",\"externalUtilities\":"+Json.encode(input.externalUtilities().entrySet().stream().limit(30)
@@ -114,6 +118,7 @@ public final class AnalysisService implements AutoCloseable {
                         +",\"comparison\":"+comparison+"}";
                 synchronized(AnalysisService.this){job.checkCancelled();job.publicationStarted=true;}
                 try{store.save(job);job.storageState="SAVED";job.log("Đã lưu hồ sơ và ZIP trên máy.");}catch(java.io.IOException e){job.storageState="FAILED";job.storageError=e.getMessage();job.log("Lưu hồ sơ thất bại: "+e.getMessage()+". Hãy tải ZIP trước khi đóng phiên.");}
+                if(BulkReports.needed(report) && "SAVED".equals(job.storageState)) job.report=null;
                 job.log("Hoàn tất. Sẵn sàng xem báo cáo và xuất TXT/CSV.");
                 job.finishedNanos = System.nanoTime();
                 job.completedSteps = job.totalSteps;
@@ -206,6 +211,17 @@ public final class AnalysisService implements AutoCloseable {
             double heap = sampleHeap();
             Map<String,Object> status = new LinkedHashMap<>();
             status.put("id",id); status.put("source",source); status.put("state",state);
+            status.put("recovery",RecoveryWriter.state(this));
+            if("FAILED".equals(state)) {
+                BulkReports.recoverPreview(this);
+                var recovered=BulkReports.directory(id);
+                if(java.nio.file.Files.exists(recovered.getParent().getParent().resolve(id).resolve("result.json"))
+                        && java.nio.file.Files.exists(recovered.resolve("recovered-report.zip"))) {
+                    // Chỉ nhả report sau khi CSV/ZIP và bản web đã được xuất bản nguyên tử.
+                    report=null;
+                    status.put("recovery","SAVED: "+recovered);
+                }
+            }
             status.put("canCancel",state.equals("RUNNING")&&!publicationStarted);
             status.put("phase",phase); status.put("error",error); status.put("lines",List.copyOf(lines));
             status.put("code",errorCode); status.put("action",errorAction);

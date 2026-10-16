@@ -1,5 +1,5 @@
 import { esc, num } from './charts.js';
-import { last, badge, table, tr } from './ui-components.js';
+import { last, badge, table, tr, patternCount } from './ui-components.js';
 export function auEvidence(patterns, batch, report) {
   return [
     {
@@ -43,7 +43,7 @@ export function paperConclusionEvidence(c) {
   const expectedFinal = { E: 84, B: 75, 'B,E': 63.5 },
     expectedDb1 = { E: 72, 'B,E': 45 };
   const matches = (batch, expected) =>
-    batch.largePatterns.length === Object.keys(expected).length &&
+    patternCount(batch, 'LARGE') === Object.keys(expected).length &&
     batch.largePatterns.every((p) => near(p.averageUtility, expected[canonical(p)]));
   const db1 = r.batches[1],
     direct = matches(db1, expectedDb1),
@@ -71,7 +71,7 @@ export function finalConclusion(c) {
   const empty = patterns.length
     ? ''
     : `<p class="final-empty"><strong>Kết quả cuối: không có HAUP ở ngưỡng này.</strong> ${maxBound < b.minUtilUpper ? `max AUUB = ${num(maxBound)} &lt; ${num(b.minUtilUpper)}: cận trên loại trừ HAUP.` : 'Không có mẫu LARGE trong kết quả miner trả về.'} Đây là kết quả đã xử lý, không phải thiếu dữ liệu.</p>`;
-  return `<section class="card final-conclusion" id="analysis-final"><div class="card-head"><div><h2>Bước cuối · Kết luận khai phá</h2><p>${esc(c.source)} · toàn bộ ${num(r.transactionCount, 0)} giao dịch đến ${esc(b.name)} · độc lập với bộ lọc bên trên</p></div>${badge('Đã hoàn tất', 'green')}</div><div class="card-body"><dl class="final-numbers" aria-label="Số liệu kết quả cuối"><div><dt>HAUP cuối</dt><dd>${num(patterns.length, 0)}<small>mẫu LARGE</small></dd></div><div><dt>Ngưỡng HAUP</dt><dd>${num(b.minUtilUpper, 6)}<small>Sᵤ × TU(DB) · utility</small></dd></div><div><dt>Tổng tiện ích TU(DB)</dt><dd>${num(b.totalTransactionUtility, 6)}<small>utility · ${esc(b.name)}</small></dd></div><div><dt>Re-scan</dt><dd>${num(r.stats.rescanCount, 0)}<small>lần · không gồm DB0</small></dd></div></dl><p><strong>${num(patterns.length, 0)} HAUP (LARGE)</strong> sau ${esc(b.name)}. ${num(b.preLargePatterns.length, 0)} PRE-LARGE đang quản lý là tập dự phòng, không tính vào HAUP.</p><details class="final-formula"><summary>Ngưỡng phân loại · AU ≥ ${num(b.minUtilUpper)}</summary><div class="formula">TU(DB) = ${num(b.totalTransactionUtility)}<br>Ngưỡng HAUP = Sᵤ × TU(DB) = ${num(r.upperThreshold, 17)} × ${num(b.totalTransactionUtility)} = ${num(b.minUtilUpper)}<br>Mẫu đạt khi AU(P) = U(P) / |P| ≥ ${num(b.minUtilUpper)}</div></details>${verificationBadges(c)}${empty}<details class="report-proof"><summary>Kiểm chứng & phép tính</summary>${paperConclusionEvidence(c)}</details><p>Đã xử lý ${r.batchCount} batch · ${r.stats.rescanCount} lần re-scan (không gồm DB0) · thuật toán ${num(r.elapsedMs)} ms.</p><p class="subtle">PRE-LARGE và số đo là thông tin hỗ trợ; tập HAUP/AU là kết quả khai phá.</p></div>${
+  return `<section class="card final-conclusion" id="analysis-final"><div class="card-head"><div><h2>Bước cuối · Kết luận khai phá</h2><p>${esc(c.source)} · toàn bộ ${num(r.transactionCount, 0)} giao dịch đến ${esc(b.name)} · độc lập với bộ lọc bên trên</p></div>${badge(c.recovered ? 'Khôi phục kết quả' : 'Đã hoàn tất', 'green')}</div><div class="card-body"><dl class="final-numbers" aria-label="Số liệu kết quả cuối"><div><dt>HAUP cuối</dt><dd>${num(patternCount(b, 'LARGE'), 0)}<small>mẫu LARGE</small></dd></div><div><dt>Ngưỡng HAUP</dt><dd>${num(b.minUtilUpper, 6)}<small>Sᵤ × TU(DB) · utility</small></dd></div><div><dt>Tổng tiện ích TU(DB)</dt><dd>${num(b.totalTransactionUtility, 6)}<small>utility · ${esc(b.name)}</small></dd></div><div><dt>Re-scan</dt><dd>${num(r.stats.rescanCount, 0)}<small>lần · không gồm DB0</small></dd></div></dl><p><strong>${num(patternCount(b, 'LARGE'), 0)} HAUP (LARGE)</strong> sau ${esc(b.name)}. ${num(patternCount(b, 'PRE_LARGE'), 0)} PRE-LARGE đang quản lý là tập dự phòng, không tính vào HAUP.</p><details class="final-formula"><summary>Ngưỡng phân loại · AU ≥ ${num(b.minUtilUpper)}</summary><div class="formula">TU(DB) = ${num(b.totalTransactionUtility)}<br>Ngưỡng HAUP = Sᵤ × TU(DB) = ${num(r.upperThreshold, 17)} × ${num(b.totalTransactionUtility)} = ${num(b.minUtilUpper)}<br>Mẫu đạt khi AU(P) = U(P) / |P| ≥ ${num(b.minUtilUpper)}</div></details>${verificationBadges(c)}${empty}<details class="report-proof"><summary>Kiểm chứng & phép tính</summary>${paperConclusionEvidence(c)}</details><p>Đã xử lý ${r.batchCount} batch · ${r.stats.rescanCount} lần re-scan (không gồm DB0) · thuật toán ${num(r.elapsedMs)} ms.</p><p class="subtle">PRE-LARGE và số đo là thông tin hỗ trợ; tập HAUP/AU là kết quả khai phá.</p></div>${
     patterns.length
       ? table(
           ['HAUP cuối P', 'U(P)', '|P|', 'AU(P)', 'Sᵤ × TU(DB)', 'Phân loại'],
@@ -112,7 +112,7 @@ export function verificationBadges(c) {
   const expected = { E: 84, B: 75, 'B,E': 63.5 };
   const matched =
     paper &&
-    b.largePatterns.length === 3 &&
+    patternCount(b, 'LARGE') === 3 &&
     b.largePatterns.every(
       (p) => Math.abs(p.averageUtility - (expected[canonical(p)] ?? NaN)) < 1e-8,
     );

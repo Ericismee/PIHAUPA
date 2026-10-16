@@ -479,3 +479,20 @@ Tái đo: `piHAUPA.ReadStageBenchmark <DataRoot> <TênThưMụcDataset>` với c
 - Theo ngưỡng trên: giữ Sₗ và số giao dịch; theo kích thước: giữ hai ngưỡng; độ nhạy: cùng số giao dịch, thay hai ngưỡng. Chỉ các lượt có cùng nguồn, cấu hình chèn và số lần đo được ghép. Dãy kích thước dùng prefix 20/40/60/80/100%, không phải bộ dữ liệu tổng hợp 200K–1000K của tác giả.
 - Bảng thiết bị hiển thị thời gian đọc, CPU luồng, RAM Java, RAM máy và CPU lấy mẫu. Không gọi sampled heap là đỉnh RAM tuyệt đối; kết quả Java không đồng nhất phép đo C++ của tác giả. Các thuật toán đối chứng chưa cài đặt không xuất hiện dưới dạng số liệu giả.
 - ZIP thêm `insertion-performance.csv`: tiến trình chèn, số giao dịch tích lũy, thời gian mỗi batch, heap và quyết định re-scan; `resource-samples.csv` bổ sung CPU tiến trình/toàn máy.
+
+
+### Báo cáo lớn và phục hồi khi hết heap
+
+Khi tổng số bản ghi mẫu trong báo cáo vượt 50.000, web dùng luồng ghi CSV/ZIP tuần tự xuống đĩa. JSON gửi lên trình duyệt chỉ có tối đa 100 mẫu mỗi lớp/batch, kèm **số đếm đầy đủ** `largePatternCount`, `preLargePatternCount`; giao diện đọc 25 mẫu/trang từ CSV. Đây là giới hạn preview truyền tải, không giới hạn kết quả khai phá. Tìm kiếm báo cáo lớn thực hiện khi nhấn Enter/rời ô tìm kiếm, có thể phải quét CSV; các trang đầu không tìm kiếm dừng đọc khi đủ dòng.
+
+- Tải ZIP dùng stream file, tránh nạp toàn bộ ZIP vào byte[].
+- Mẫu đầy đủ, SMALL còn quản lý nếu có, công thức, số đo và nhật ký nằm trong gói xuất. Có HTML gọn với bảng tổng và biểu đồ runtime/bộ nhớ; số liệu lớn nằm trong CSV.
+- Sau khi lưu thành công, job giải phóng tham chiếu tới report mẫu lớn; bản đầy đủ nằm trên đĩa. Metadata giao diện giữ tối đa 600 mẫu thiết bị gần nhất và ghi tổng số mẫu; ZIP giữ toàn bộ số đo.
+- CLI mặc định vẫn xuất JSON đầy đủ. Chế độ web bật `pihaupa.diskReports`; `pihaupa.bulkThreshold` mặc định 50.000 chỉ dùng chọn cách xuất, không thay ngưỡng khai phá.
+- `RecoveryWriter` có thể ghi report đã hoàn tất từ job FAILED sang `results/runs/recovered/<id>` bằng stream, không mining lại. Việc cứu hộ cần report vẫn còn trong JVM; không phải checkpoint để tiếp tục khai phá sau khi JVM đã mất.
+
+Sự cố ngày 16/10/2026 đã cứu đầy đủ: DB0 3.846.405 dòng, DB1 2.945.507 dòng, DB2 2.307.057 dòng (7.971 LARGE/HAUP, 2.299.086 PRE-LARGE). Đã đối chiếu số dòng và đọc kiểm tra CRC của ZIP 199.103.738 byte. Không tải dữ liệu thực nghiệm này lên Git.
+
+Kiểm tra stress ghi 2 triệu **bản ghi fixture** và đọc phân trang/ZIP dưới `-Xmx128m`; không có nghĩa khai phá 2 triệu mẫu thực chỉ cần 128MiB. Chạy: `java -Xmx128m -ea -cp "target/classes;target/test-classes" piHAUPA.RecoveryWriterTest stress` sau build/tests, với PIHAUPA_RUN_ROOT trỏ thư mục test.
+
+`scripts/RecoveryAttach.java` và `scripts/ReportStorageAttach.java` là công cụ cứu hộ/cập nhật phần báo cáo một lần qua JDK Attach. Chỉ dùng với JVM của dự án và class schema tương thích; không đổi thuật toán đang chạy. Không cần dùng trong vận hành bình thường sau khi khởi động bằng bản sửa.

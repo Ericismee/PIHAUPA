@@ -88,6 +88,12 @@ public record AnalysisReport(
     }
 
     public String toJson() {
+        // Web mode only: cap the transport preview, never the mining result.
+        if (Boolean.getBoolean("pihaupa.diskReports")) {
+            long count = managedPatterns.size();
+            for (BatchView batch : batches) count += (long)batch.largePatterns().size() + batch.preLargePatterns().size();
+            if (count > Integer.getInteger("pihaupa.bulkThreshold",50000)) return ReportJsonView.encode(this);
+        }
         JsonBuilder json = new JsonBuilder();
         json.beginObject()
                 .number("upperThreshold", upperThreshold)

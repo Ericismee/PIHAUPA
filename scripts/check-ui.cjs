@@ -267,3 +267,19 @@ if (!$('run-elapsed-summary').textContent.includes('00:15:00') || $('run-workloa
   ctx,
 );
 console.log('PASS elapsed log clock and mining workload');
+
+if (fs.existsSync('results/runs/6c546d47-2a7c-449e-83fc-fd9d8c08802e/result.json')) {
+  ctx.bulkResult = JSON.parse(
+    fs.readFileSync('results/runs/6c546d47-2a7c-449e-83fc-fd9d8c08802e/result.json', 'utf8'),
+  );
+  vm.runInContext(
+    `state.current=bulkResult; state.history=[bulkResult]; state.batchIndex=2;
+    if (patternCount(last(bulkResult.report),'LARGE') !== 7971) throw Error('Preview count used instead of full HAUP count');
+    const conclusion=finalConclusion(bulkResult); if (!conclusion.includes('7.971')) throw Error('Final full HAUP count missing');
+    renderPatterns($('patterns-content'),{patterns:last(bulkResult.report).largePatterns.slice(0,25),top:last(bulkResult.report).largePatterns.slice(0,12),total:7971,page:0});
+    if (!$('patterns-content').innerHTML.includes('7.971')) throw Error('Paged total missing');
+    renderMeasurements();`,
+    ctx,
+  );
+  console.log('PASS recovered bulk report: exact full counts and paged table');
+}

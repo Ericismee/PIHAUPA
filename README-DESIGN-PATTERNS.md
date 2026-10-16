@@ -364,3 +364,13 @@ Gọi Q là tiền tố chung của danh sách anh em, V_Q(j)=Σ u(j,T) trên c�
 Kiểm chứng bản mặc định so với revision 04cbee2: NewConnects đầy đủ, Su=3,5%, Sl=3%, JDK25, heap tối đa2GiB, 1 warm-up +3 lượt, median 6.224,26→5.296,28ms (giảm14,9%); mẫu duyệt3.468→1.966, phép ghép3.392→1.890 (giảm44,3%). SHA-256 toàn bộ mẫu/utility/phân loại: d86b45c63a9ed1b59f08e8d000c8514af6a1475d8f7bb6c7d15e8dfe410731a9, khớp hai bản. Lượt web dài vẫn chạy đồng thời theo yêu cầu người dùng: số đo có nhiễu CPU/GC, không phải benchmark cô lập của tác giả và không đại diện ngưỡng thấp hơn.
 
 Tổng hợp seed71352,3000giao dịch/16item,Su=3%,Sl=1,5%: bản mới7.500 phép ghép so11.629; toàn bộ kết quả khớp. Bộ kiểm thử bổ sung 10seed,8item,100giao dịch, khai phá lại batch cuối rồi vét cạn mọi tập con: đủ LARGE và PRE-LARGE, utility chính xác. Kiểm thử số thực, các chính sách re-scan và tùy chọn earlyJoin cũng đã qua. Không đổi ngưỡng, không giới hạn số kết quả, không lấy mẫu dữ liệu trong thuật toán sản phẩm.
+
+
+### Báo cáo lớn: tách tính toán khỏi truyền tải
+
+- [RecoveryWriter](src/main/java/vn/edu/dlu/pihaupa/application/RecoveryWriter.java) là facade ghi từng dòng CSV và từng file ZIP. Bộ đệm không tăng theo tổng số mẫu; không gom toàn bộ báo cáo vào Map<String,String>/byte[].
+- [ReportJsonView](src/main/java/piHAUPA/ReportJsonView.java) tạo view JSON giới hạn preview, kèm số đếm đầy đủ. Đây là view model cho truyền tải, không phải cắt mẫu trong miner.
+- [BulkReports](src/main/java/vn/edu/dlu/pihaupa/application/BulkReports.java) truy cập CSV đã lưu để đọc trang/lọc; số mẫu trong KPI lấy từ metadata, không lấy độ dài preview. Tìm kiếm có thể cần quét file; không tuyên bố đây là chỉ mục truy vấn tối ưu.
+- [FileResponses](src/main/java/vn/edu/dlu/pihaupa/web/FileResponses.java) là adapter HTTP stream file, tránh tạo byte[] bằng kích thước ZIP. Các vai trò này bổ sung cách dùng Facade/Adapter/Repository đã mô tả, không bổ sung mẫu GoF mới vào danh sách.
+
+Mục đích chính: tránh OUT_OF_MEMORY ở bước tạo báo cáo sau khi đã khai phá hàng triệu mẫu; không giảm số ứng viên cần khai phá. Thời gian ghi vẫn tỷ lệ số bản ghi và kích thước nén. Không thay AU, phân loại hoặc re-scan. Kiểm thử có stress 2 triệu bản ghi fixture dưới 128MiB, kiểm tra số dòng/CRC ZIP và đọc phân trang. Dữ liệu đã khai phá được giữ đầy đủ trên đĩa; không có giới hạn số kết quả sản phẩm.

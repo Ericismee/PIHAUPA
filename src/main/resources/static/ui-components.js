@@ -52,3 +52,9 @@ export function table(headers, rows, caption = '') {
 }
 export const tr = (values) =>
   `<tr>${values.map((v) => `<td class="${typeof v === 'number' || /^-?[0-9][0-9., ]*$/.test(String(v)) ? 'numeric' : ''}">${v}</td>`).join('')}</tr>`;
+
+// Số đếm đầy đủ độc lập với preview của báo cáo phân trang.
+export const patternCount = (batch, type) =>
+  type === 'LARGE'
+    ? (batch.largePatternCount ?? batch.largePatterns.length)
+    : (batch.preLargePatternCount ?? batch.preLargePatterns.length);

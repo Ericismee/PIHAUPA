@@ -24,6 +24,7 @@ public final class LabServer {
     private final DatasetCatalog catalog;
     private LabServer(DatasetCatalog catalog) { this.catalog=catalog; }
     public static void main(String[] args) throws Exception {
+        System.setProperty("pihaupa.diskReports","true");
         int port = args.length == 0 ? 8000 : Integer.parseInt(args[0]);
         String root = System.getenv("PIHAUPA_DATA_ROOT");
         DatasetCatalog catalog = new DatasetCatalog(root == null || root.isBlank() ? null : Path.of(root));
@@ -82,8 +83,9 @@ public final class LabServer {
             } else if(path.equals("/api/runs") && method.equals("GET")) {send(x,200,"application/json",service.store().list());
             } else if(path.startsWith("/api/runs/") && method.equals("GET")) {
                 String[] parts=path.substring("/api/runs/".length()).split("/");
-                if(parts.length==1)send(x,200,"application/json",service.store().result(parts[0]));
-                else if(parts.length==2&&parts[1].equals("export")){x.getResponseHeaders().set("Content-Disposition","attachment; filename=\"pihaupa-run.zip\"");sendBytes(x,"application/zip",service.store().archive(parts[0]));}
+                if(parts.length==2&&parts[1].equals("patterns")){send(x,200,"application/json",BulkReports.page(parts[0],Integer.parseInt(q.getOrDefault("batch","0")),q.getOrDefault("type","ALL"),q.getOrDefault("search",""),Integer.parseInt(q.getOrDefault("page","0"))));}
+                else if(parts.length==1)send(x,200,"application/json",service.store().result(parts[0]));
+                else if(parts.length==2&&parts[1].equals("export")){x.getResponseHeaders().set("Content-Disposition","attachment; filename=\"pihaupa-run.zip\"");FileResponses.send(x,"application/zip",BulkReports.directory(parts[0]).getParent().getParent().resolve(parts[0]).resolve("analysis.zip"));}
                 else send(x,404,"application/json","{}");
             } else if (path.startsWith("/api/jobs/") && method.equals("GET")) {
                 String[] parts=path.substring("/api/jobs/".length()).split("/");
@@ -95,6 +97,13 @@ public final class LabServer {
                 } else if (parts.length==2 && parts[1].equals("export")) {
                     if (!job.state.equals("COMPLETED")) throw new IllegalStateException("Báo cáo chưa sẵn sàng.");
                     String format=q.getOrDefault("format","csv");
+                    if(!Set.of("zip","csv","txt").contains(format))throw new IllegalArgumentException("Chỉ hỗ trợ ZIP/CSV/TXT.");
+                    Path bulk=BulkReports.directory(job.id);
+                    if(Files.exists(bulk.resolve("recovered-report.zip"))){
+                        Path file=bulk.resolve(format.equals("zip")?"recovered-report.zip":format.equals("csv")?"managed-patterns.csv":"README.txt");
+                        x.getResponseHeaders().set("Content-Disposition","attachment; filename=\"pihaupa-report."+format+"\"");
+                        FileResponses.send(x,format.equals("zip")?"application/zip":format.equals("csv")?"text/csv":"text/plain",file);return;
+                    }
                     if(format.equals("zip")) {
                         x.getResponseHeaders().set("Content-Disposition","attachment; filename=\"pihaupa-analysis.zip\"");
                         sendBytes(x,"application/zip",ReportArchive.zip(ReportArchive.analysis(job))); return;

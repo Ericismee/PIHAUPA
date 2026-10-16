@@ -12,13 +12,20 @@ public final class RunStore {
     public RunStore(){String value=System.getenv("PIHAUPA_RUN_ROOT");root=Path.of(value==null||value.isBlank()?"results/runs":value).toAbsolutePath().normalize();}
     private Path folder(String id){if(!id.matches("[a-f0-9-]{36}"))throw new IllegalArgumentException("Mã lượt chạy không hợp lệ.");return root.resolve(id);}
     public void save(AnalysisService.Job job)throws IOException{
+        // Also handles an in-flight worker from the previous version after a hot update.
+        if(job.report!=null && BulkReports.needed(job.report) && !Files.exists(BulkReports.directory(job.id).resolve("recovered-report.zip"))) {
+            Path directory=RecoveryWriter.write(job);BulkReports.counts(directory,job.report);
+        }
         Files.createDirectories(root);
         Path temp=Files.createTempDirectory(root,".writing-");
         try{
             Files.writeString(temp.resolve("result.json"),job.result,StandardCharsets.UTF_8);
             Files.writeString(temp.resolve("manifest.json"),Json.encode(job.manifest),StandardCharsets.UTF_8);
-            Files.write(temp.resolve("analysis.zip"),ReportArchive.zip(ReportArchive.analysis(job)));
+            Path bulk=BulkReports.directory(job.id).resolve("recovered-report.zip");
+            if(Files.exists(bulk))Files.copy(bulk,temp.resolve("analysis.zip"));
+            else Files.write(temp.resolve("analysis.zip"),ReportArchive.zip(ReportArchive.analysis(job)));
             Files.createDirectories(root);Files.move(temp,folder(job.id));
+            if(Files.exists(bulk))job.report=null;
         }finally{if(Files.exists(temp))try(var paths=Files.walk(temp)){for(Path p:paths.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(p);}}
     }
     public String list()throws IOException{
