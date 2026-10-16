@@ -274,11 +274,13 @@ public final class PiHaupaMiner {
                 addOrReplacePattern(pattern, node.sumUtility);
             }
 
-            double mau = maximumAverageUpperBound(node, pattern.size());
+            // Node cuối không còn item phía sau để mở rộng: tránh quét MAU vô ích.
+            double mau = i + 1 < currentList.size() ? maximumAverageUpperBound(node, pattern.size()) : 0.0;
             if (mau >= lower && i + 1 < currentList.size()) {
                 if (extensionPlan == null) extensionPlan = new ExtensionPlan(currentList);
                 if (!extensionPlan.canReach(node, pattern.size(), i + 1, lower)) {
                     extensionBranchesPruned++;
+                    node.entries = List.of();
                     prefix.remove(prefix.size() - 1);
                     continue;
                 }
@@ -291,10 +293,15 @@ public final class PiHaupaMiner {
                 }
                 // Node này đã ghép xong mọi nhánh; giải phóng cache trước khi DFS xuống sâu.
                 node.suffixAuub = null;
+                // Các list con đã sở hữu entry riêng. Nhánh cha đã ghép xong;
+                // bỏ tham chiếu trước DFS để GC thu hồi entry, tránh giữ cả cây tìm kiếm.
+                // Các vòng sau chỉ ghép với j > i, không dùng lại node này.
+                node.entries = List.of();
                 if (!conditional.isEmpty()) {
                     patternExpansion(conditional, pattern);
                 }
             }
+            node.entries = List.of();
             prefix.remove(prefix.size() - 1);
         }
     }
@@ -337,6 +344,12 @@ public final class PiHaupaMiner {
 
     private PiNode combine(PiNode left, PiNode right, double lower) {
         combinedNodes++;
+        // AUUB chặn mọi siêu mẫu. Không cấp phát/ghép nếu cận đã dưới Sl×TU.
+        // Dùng biên bảo thủ cho số thực; không loại mẫu chỉ vì AU hiện tại thấp.
+        if (Math.min(left.auub, right.auub) < lower - Math.max(1.0, lower) * 1e-12) {
+            earlyJoinsPruned++;
+            return null;
+        }
         PiNode combined = new PiNode(right.item);
         combined.auub = Math.min(left.auub, right.auub);
         combined.maximumRemainingNumber = Math.min(left.maximumRemainingNumber, right.maximumRemainingNumber);
@@ -548,7 +561,7 @@ public final class PiHaupaMiner {
 
     private static final class PiNode {
         private final String item;
-        private final List<PiEntry> entries = new ArrayList<>();
+        private List<PiEntry> entries = new ArrayList<>();
         private double sumUtility;
         private double auub;
         private double projectedUtility;

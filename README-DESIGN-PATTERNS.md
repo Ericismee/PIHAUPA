@@ -305,6 +305,12 @@ Frontend tách thành `api.js`, `ui-components.js`, `report-ui.js`, `notificatio
 Kết quả chính dùng median một số lẻ lượt (1/3/5); 3/5 có warm-up. So sánh heap đã tách JVM theo chính sách nhưng vẫn dùng heap quan sát, không phải RSS. Hồ sơ hoàn tất lưu ở `results/runs`, có thể mở lại khi cache/job ID đã hết hạn. Hủy trước công bố không lưu kết quả dở dang.
 
 
+## Vòng đời dữ liệu trong DFS
+
+[PiHaupaMiner.patternExpansion](src/main/java/piHAUPA/PiHaupaMiner.java) bỏ tham chiếu đến entry của node cha ngay khi đã tạo xong các list con, trước khi đi sâu vào DFS. Entry của con là đối tượng riêng; các vòng ghép còn lại chỉ dùng node ở phía sau, nên dữ liệu cha không được đọc lại. Cách này giảm dữ liệu sống đồng thời và tạo cơ hội cho GC thu hồi sớm; không gọi `System.gc()` trong vòng lặp. Node cuối cũng bỏ bước quét MAU vì không còn item để mở rộng.
+
+Đây là quản lý vòng đời bộ nhớ, **không thêm vào số lượng GoF design pattern**. Tác dụng hiệu năng phải đo riêng: xem đối chứng NewConnects và fixture trong README; không cam kết phần trăm cho mọi ngưỡng/dataset.
+
 ## Tối ưu lõi khai phá: bước chuẩn bị trung gian
 
 Đây là **kỹ thuật tối ưu triển khai**, không bổ sung tên GoF vào số lượng design pattern. Strategy/Facade giúp thay nguồn và điều phối; tốc độ ở đây đến từ giảm cấp phát và tránh sắp xếp lặp.

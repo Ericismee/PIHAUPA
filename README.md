@@ -450,6 +450,16 @@ Thanh % trong Nhật ký tính theo mốc thực sự đã hoàn tất: 1 mốc 
 BUSY vẫn là phản hồi hợp lệ của API cho các client gửi đồng thời; web tự xử lý để nối lại tác vụ. Kiểm chứng/testcase dùng cùng worker gate, được chờ đến hoàn tất. ResourceMonitor khởi tạo trong try/finally để lỗi khởi tạo không bỏ lại khóa active. API trả HTTP status trong lỗi frontend để phân biệt ID hết hạn với lỗi mạng.
 
 
+### Giảm bộ nhớ sống trong tìm kiếm DFS (16/10/2026)
+
+- Sau khi ghép xong các node con, giải phóng danh sách entry của node cha **trước khi** đệ quy. Các node con sở hữu entry riêng; các vòng tiếp theo chỉ ghép với node phía sau, nên không cần giữ lại danh sách đã xử lý.
+- Node cuối không còn phần mở rộng: bỏ lượt quét tính MAU. Trước phép ghép, kiểm tra cận AUUB bảo thủ để tránh cấp phát khi mọi siêu mẫu đều dưới ngưỡng PRE-LARGE.
+- Không đổi Sᵤ/Sₗ, điều kiện re-scan, tập HAUP/PRE-LARGE; không giới hạn số mẫu. Đây là kỹ thuật quản lý vòng đời dữ liệu, không phải design pattern GoF mới.
+
+Đối chứng bằng `scripts/OptimizationBench.java`, 1 warm-up + 3 lượt đo, JVM riêng: toàn tệp NewConnects tại Sᵤ=0,035/Sₗ=0,03, heap 512 MiB, median 5.543,34 → 5.011,36 ms (giảm 9,6%). Fixture seed 71352, 3.000 giao dịch/16 item, Sᵤ=0,02/Sₗ=0,01, heap 256 MiB: 353,71 → 232,46 ms (giảm 34,3%). SHA-256 của toàn bộ kết quả từng batch khớp trước/sau. Đây là đối chứng với source ngay trước thay đổi này; có lượt nền cùng máy, chưa suy rộng sang cấu hình NewConnects chạy nhiều giờ.
+
+Lõi mới cần JVM mới. Không hot-swap thuật toán vào lượt đang khai phá; khi người dùng chọn giữ lượt hiện tại, chỉ nạp tối ưu sau khi lượt đó kết thúc và server được khởi động lại.
+
 ### Tối ưu bước 1: đọc, kiểm tra và SHA-256
 
 Khảo sát nguồn chính thức: [BufferedReader JDK 17](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/io/BufferedReader.html), [DigestInputStream](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/security/DigestInputStream.html), [Double.parseDouble](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Double.html#parseDouble(java.lang.String)), [FileChannel](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/nio/channels/FileChannel.html), [Oracle JFR](https://docs.oracle.com/en/java/javase/17/troubleshoot/troubleshoot-performance-issues-using-jfr.html), [OpenJDK JMH](https://github.com/openjdk/jmh), [FastDoubleParser của tác giả](https://github.com/wrandelshofer/FastDoubleParser). Đây là các nguồn được chọn theo vấn đề, không tuyên bố đã đọc mọi tài liệu trên Internet.
