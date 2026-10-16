@@ -22,12 +22,44 @@ public final class LargeTextDatasetTest {
         String exported = ExportBundle.reportText(input, report, "test/transactions.txt");
         check(exported.contains("Su = 0.500000") && !exported.contains("Original"), "single-policy export");
         check(ExportBundle.reportCsv(input, report, "test").contains("\"AUUB\",\"2\""), "AUUB CSV");
+        verifiesProjectedBoundAgainstAllSubsets();
         verifiesCanonicalIncrementalSums();
         verifiesSkewedSupports();
         verifiesInsertionPartition();
         verifiesCompactStorageAgainstMapAndOracle();
         verifiesNumericParsingAndSinglePassHash();
         System.out.println("Large TXT test passed.");
+    }
+
+    private static void verifiesProjectedBoundAgainstAllSubsets() throws Exception {
+        for(int seed=0;seed<10;seed++){
+            var random=new java.util.Random(71352+seed);
+            StringBuilder text=new StringBuilder();
+            for(int row=0;row<100;row++){
+                StringBuilder items=new StringBuilder("1 "),values=new StringBuilder("3 ");int total=3;
+                for(int item=2;item<=8;item++)if(random.nextBoolean()){
+                    int u=1+random.nextInt(20);items.append(item).append(' ');values.append(u).append(' ');total+=u;
+                }
+                text.append(items).append(':').append(total).append(':').append(values).append('\n');
+            }
+            InputData input=ArchiveDatasetReader.readTransactionsText(new StringReader(text.toString()),"projected",.02,.01,x->{});
+            var report=AnalysisReport.run(input,RescanPolicy.ORIGINAL);
+            var last=report.batches().get(report.batches().size()-1);
+            check(last.rescanTriggered(),"full final expansion required for exhaustive PRE-LARGE check");
+            var expected=new java.util.HashMap<java.util.List<String>,Double>();
+            var all=input.batches().stream().flatMap(b->b.transactions().stream()).toList();
+            for(int mask=1;mask<256;mask++){
+                var key=new java.util.ArrayList<String>();for(int bit=0;bit<8;bit++)if((mask&(1<<bit))!=0)key.add(String.valueOf(bit+1));
+                double sum=0.0;
+                for(Transaction transaction:all)if(transaction.internalUtilities().keySet().containsAll(key)){
+                    for(String item:key)sum+=transaction.utilityOf(item,input.externalUtilities());
+                }
+                if(sum/key.size()>=last.minUtilLower())expected.put(java.util.List.copyOf(key),sum);
+            }
+            var actual=new java.util.HashMap<java.util.List<String>,Double>();
+            java.util.stream.Stream.concat(last.largePatterns().stream(),last.preLargePatterns().stream()).forEach(p->actual.put(p.items(),p.sumUtility()));
+            check(actual.equals(expected),"projected bound must retain every LARGE/PRE-LARGE and exact utility");
+        }
     }
 
     private static void verifiesCanonicalIncrementalSums() {

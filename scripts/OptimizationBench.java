@@ -5,8 +5,8 @@ public class OptimizationBench {
  public static void main(String[] args)throws Exception{
   Random random=new Random(71352);StringBuilder data=new StringBuilder();
   for(int row=0;row<3000;row++){
-   StringBuilder items=new StringBuilder(),values=new StringBuilder();int total=0;
-   for(int item=1;item<=16;item++)if(random.nextDouble()<(Boolean.getBoolean("bench.skew")?(item<=3?.8:.03):.55)){int u=1+random.nextInt(30);items.append(item).append(' ');values.append(u).append(' ');total+=u;}
+   StringBuilder items=new StringBuilder(),values=new StringBuilder();double total=0;
+   for(int item=1;item<=16;item++)if(random.nextDouble()<(Boolean.getBoolean("bench.skew")?(item<=3?.8:.03):.55)){double u=(1+random.nextInt(30))/(Boolean.getBoolean("bench.decimal")?10.0:1.0);items.append(item).append(' ');values.append(u).append(' ');total+=u;}
    if(total==0){row--;continue;} data.append(items).append(':').append(total).append(':').append(values).append('\n');
   }
   InputData input=ArchiveDatasetReader.readTransactionsText(args.length>2?java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(args[2])):new StringReader(data.toString()),args.length>2?args[2]:"seed71352",args.length>0?Double.parseDouble(args[0]):.04,args.length>1?Double.parseDouble(args[1]):.025,x->{});

@@ -351,3 +351,16 @@ Benchmark bật dữ liệu lệch bằng JVM option `-Dbench.skew=true`; đổi
 Để bảo toàn số thực, terminal tính utility theo thứ tự chuẩn hóa cũ. Chỉ dùng tổng cộng theo đường đi khi external utility đều bằng 1, internal utility đều là số nguyên và TU tích lũy < 2^52; miền này bảo đảm các tổng nguyên dương biểu diễn chính xác. Nếu có số thập phân hoặc vượt miền an toàn thì quay về phép cộng chuẩn hóa. Không thay công thức AU/MAU hoặc quyết định re-scan.
 
 Benchmark so với revision 84eba7e: tổng hợp 3.000 giao dịch, Su=30%, Sl=1%, 10 warm-up + 9 lượt, không re-scan: tổng median 82,32 → 82,55 ms; DB1 6,38 → 6,73 ms; DB2 6,67 → 6,18 ms. SHA-256 toàn bộ mẫu/utility/phân loại khớp. **Chưa chứng minh tăng tốc tổng thể**; thay đổi giữ cấu trúc theo phương pháp bài báo, không quảng bá một tỷ lệ tăng tốc. Kiểm thử bổ sung kiểm tra bit số thực sau cập nhật trên cây đổi thứ tự, gồm utility gần 2^52.
+
+
+### Cận mở rộng theo tiền tố (16/10/2026)
+
+**Mặc định bật:** [ExtensionPlan / combine](src/main/java/piHAUPA/PiHaupaMiner.java) dùng tổng utility item cuối trên tập giao dịch của list, thay tổng utility singleton toàn database, khi EU=1, IU nguyên dương và TU<2^52. Mỗi entry lưu thêm utility item cuối để không phải tra giao dịch gốc khi ghép; list vẫn giữ thứ tự giao dịch và phép cộng U(P) cũ. Với số thực/EU khác 1/vượt miền cộng nguyên chính xác, giữ cận toàn DB trước đây.
+
+Gọi Q là tiền tố chung của danh sách anh em, V_Q(j)=Σ u(j,T) trên các T chứa Q∪{j}. Với P=Q∪{a} và tập item mở rộng S, support(P∪S) nằm trong support(P) và support(Q∪{j}) của từng j∈S. Vì utility dương: U(P∪S)≤U(P)+Σ V_Q(j). Với k item thêm, lấy k giá trị V lớn nhất còn lại rồi chia |P|+k. Chỉ ngừng mở rộng khi mọi độ dài đều không thể đạt Sₗ×TU(DB). V_Q là ký hiệu giải thích tối ưu triển khai, **không phải thuật ngữ/công thức mới được gán cho bài báo**; không sửa MAU hoặc re-scan của tác giả.
+
+**Thử nghiệm không bật mặc định:** JVM option `-Dpihaupa.earlyJoin=true` bật cắt ngay trong phép ghép dựa trên AUUB của giao dịch đã khớp cộng suffix còn có thể khớp. Suffix cache dùng làm tròn lên với số thực, được giải phóng trước khi đệ quy. Đây là cận downward-safe cho mẫu ghép và mọi siêu mẫu. Đo đầu trên NewConnects cho thấy kiểm tra này chậm hơn khoảng 13%; vì vậy server mặc định không bật. Log ghi riêng số nhánh chặn mở rộng và số phép ghép bị cắt sớm; không nhập nhằng hai bộ đếm.
+
+Kiểm chứng bản mặc định so với revision 04cbee2: NewConnects đầy đủ, Su=3,5%, Sl=3%, JDK25, heap tối đa2GiB, 1 warm-up +3 lượt, median 6.224,26→5.296,28ms (giảm14,9%); mẫu duyệt3.468→1.966, phép ghép3.392→1.890 (giảm44,3%). SHA-256 toàn bộ mẫu/utility/phân loại: d86b45c63a9ed1b59f08e8d000c8514af6a1475d8f7bb6c7d15e8dfe410731a9, khớp hai bản. Lượt web dài vẫn chạy đồng thời theo yêu cầu người dùng: số đo có nhiễu CPU/GC, không phải benchmark cô lập của tác giả và không đại diện ngưỡng thấp hơn.
+
+Tổng hợp seed71352,3000giao dịch/16item,Su=3%,Sl=1,5%: bản mới7.500 phép ghép so11.629; toàn bộ kết quả khớp. Bộ kiểm thử bổ sung 10seed,8item,100giao dịch, khai phá lại batch cuối rồi vét cạn mọi tập con: đủ LARGE và PRE-LARGE, utility chính xác. Kiểm thử số thực, các chính sách re-scan và tùy chọn earlyJoin cũng đã qua. Không đổi ngưỡng, không giới hạn số kết quả, không lấy mẫu dữ liệu trong thuật toán sản phẩm.

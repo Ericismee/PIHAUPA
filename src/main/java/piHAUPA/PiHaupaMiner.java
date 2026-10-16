@@ -15,6 +15,8 @@ import java.util.concurrent.CancellationException;
 public final class PiHaupaMiner {
     private java.util.function.Consumer<String> progress = ignored -> {};
     private long lastProgressNanos;
+    private double[] transactionMaximums;
+    private final boolean earlyJoinBounds = Boolean.getBoolean("pihaupa.earlyJoin");
     private boolean allIntegerUtilities = true;
     public void setProgress(java.util.function.Consumer<String> progress) { this.progress = progress; }
     private void reportProgress(String message) { progress.accept(message); }
@@ -41,6 +43,8 @@ public final class PiHaupaMiner {
     private long rescanCount;
     private long patternsVisited;
     private long combinedNodes;
+    private long earlyJoinsPruned;
+    private long extensionBranchesPruned;
     private double totalTransactionUtilityProcessed;
     private double totalMaximumUtilityProcessed;
     private boolean initialized;
@@ -203,23 +207,27 @@ public final class PiHaupaMiner {
         globalAuub.forEach((item, bound) -> {
             if (bound >= lower) byItem.put(item, new PiNode(item));
         });
+        transactionMaximums = earlyJoinBounds ? new double[transactions.size()] : null;
         int transactionIndex = 0;
         for (Transaction transaction : transactions) {
             checkCancelled();
             final int position = transactionIndex;
+            if (earlyJoinBounds) transactionMaximums[position] = unitExternalUtilities ? transaction.unitMaximumUtility()
+                    : transaction.maximumUtility(externalUtilities);
             transaction.forEachUtility((item,internalUtility) -> {
                 PiNode node = byItem.get(item);
                 if (node == null) return;
                 double utility = unitExternalUtilities ? internalUtility
                         : internalUtility * externalUtilities.get(item);
                 node.sumUtility += utility;
-                node.entries.add(new PiEntry(position, utility, 0.0));
+                node.entries.add(new PiEntry(position, utility, 0.0, utility));
             });
             transactionIndex++;
         }
         List<PiNode> nodes = new ArrayList<>(byItem.values());
         for (PiNode node : nodes) {
             node.auub = globalAuub.getOrDefault(node.item, 0.0);
+            node.projectedUtility = node.sumUtility;
         }
         nodes.sort(Comparator.comparingDouble((PiNode n) -> n.auub).thenComparing(n -> n.item));
         return new ListNodeList(nodes);
@@ -257,7 +265,7 @@ public final class PiHaupaMiner {
             List<String> pattern = prefix;
             patternsVisited++;
             if ((patternsVisited & 1023) == 0 && System.nanoTime()-lastProgressNanos >= 2_000_000_000L) {
-                reportProgress("05 · Đang mở rộng: đã duyệt "+patternsVisited+" mẫu, kết hợp "+combinedNodes+" nút; PT giữ "+patternTree.size()+" mẫu. Chưa hoàn tất.");
+                reportProgress("05 · Đang mở rộng: đã duyệt "+patternsVisited+" mẫu, kết hợp "+combinedNodes+" nút; PT giữ "+patternTree.size()+" mẫu. Chặn mở rộng "+extensionBranchesPruned+" nhánh; cắt sớm "+earlyJoinsPruned+" phép ghép. Chưa hoàn tất.");
                 lastProgressNanos=System.nanoTime();
             }
 
@@ -270,16 +278,19 @@ public final class PiHaupaMiner {
             if (mau >= lower && i + 1 < currentList.size()) {
                 if (extensionPlan == null) extensionPlan = new ExtensionPlan(currentList);
                 if (!extensionPlan.canReach(node, pattern.size(), i + 1, lower)) {
+                    extensionBranchesPruned++;
                     prefix.remove(prefix.size() - 1);
                     continue;
                 }
                 List<PiNode> conditional = new ArrayList<>();
                 for (int j = i + 1; j < currentList.size(); j++) {
-                    PiNode combined = combine(node, currentList.get(j));
-                    if (!combined.entries.isEmpty()) {
+                    PiNode combined = combine(node, currentList.get(j), lower);
+                    if (combined != null && !combined.entries.isEmpty()) {
                         conditional.add(combined);
                     }
                 }
+                // Node này đã ghép xong mọi nhánh; giải phóng cache trước khi DFS xuống sâu.
+                node.suffixAuub = null;
                 if (!conditional.isEmpty()) {
                     patternExpansion(conditional, pattern);
                 }
@@ -289,10 +300,12 @@ public final class PiHaupaMiner {
     }
 
     /** Implementation-only safe bound, separate from the paper's MAU definition.
-     * For any extension S of P, U(P union S) <= U(P) + sum U({i}), i in S.
-     * For each possible extension length, taking the largest remaining singleton
-     * utilities bounds every extension of that length. This avoids expanding
-     * huge subtrees whose AU cannot reach Sl*TU(DB), without changing re-scan.
+     * Với tiền tố chung Q, V_Q(j) = tổng u(j,T) trên các T chứa Q∪{j}.
+     * Mọi mở rộng P∪S có U(P∪S) ≤ U(P) + tổng V_Q(j), j thuộc S.
+     * Xét tổng k giá trị V lớn nhất, chia |P|+k, cho cận mọi mở rộng độ dài k.
+     * Chỉ dùng cận chiếu khi utility nguyên dương, EU=1, TU<2^52: cộng chính xác.
+     * Dữ liệu số thực/EU khác 1 giữ cận singleton toàn DB cũ.
+     * Không đổi ngưỡng, công thức MAU của bài báo hoặc điều kiện re-scan.
      */
     private final class ExtensionPlan {
         private final int[] descendingPositions;
@@ -302,7 +315,10 @@ public final class PiHaupaMiner {
             utilities = new double[order.length];
             for (int i=0;i<order.length;i++) {
                 order[i]=i;
-                utilities[i]=globalItemUtility.get(candidates.get(i).item);
+                // Cận theo tiền tố chung Q: chỉ cộng utility item j trên các T chứa Q∪{j}.
+                // Chặt hơn utility singleton toàn DB; không cộng lặp utility của Q.
+                utilities[i] = unitExternalUtilities && allIntegerUtilities && totalTransactionUtility < 0x1.0p52
+                        ? candidates.get(i).projectedUtility : globalItemUtility.get(candidates.get(i).item);
             }
             java.util.Arrays.sort(order, (a,b)->Double.compare(utilities[b],utilities[a]));
             descendingPositions = new int[order.length];
@@ -319,7 +335,7 @@ public final class PiHaupaMiner {
         }
     }
 
-    private PiNode combine(PiNode left, PiNode right) {
+    private PiNode combine(PiNode left, PiNode right, double lower) {
         combinedNodes++;
         PiNode combined = new PiNode(right.item);
         combined.auub = Math.min(left.auub, right.auub);
@@ -330,6 +346,12 @@ public final class PiHaupaMiner {
                 || right.entries.get(right.entries.size()-1).transactionIndex < left.entries.get(0).transactionIndex) return combined;
         // Các list giữ cùng thứ tự giao dịch gốc. Merge hai con trỏ thay HashMap mới mỗi phép ghép.
         // Chỉ số là vị trí trong allTransactions, không giả định TID là số hoặc đã sắp xếp.
+        // AUUB trên giao dịch chung chặn cả mẫu ghép và mọi siêu mẫu.
+        // Suffix được dựng một lần khi node được dùng để ghép nhiều nhánh.
+        boolean exactBound = unitExternalUtilities && allIntegerUtilities && totalTransactionUtility < 0x1.0p52;
+        double[] suffix = earlyJoinBounds ? suffixAuub(left) : null;
+        double matchedUpper = 0.0;
+        double conservativeLower = lower - Math.max(1.0, lower) * 1e-12;
         int leftIndex = 0;
         int rightIndex = 0;
         while (leftIndex < left.entries.size() && rightIndex < right.entries.size()) {
@@ -339,6 +361,10 @@ public final class PiHaupaMiner {
             if (leftEntry.transactionIndex < rightEntry.transactionIndex) {
                 leftIndex = left.entries.size() - leftIndex >= 8L * (right.entries.size() - rightIndex)
                         ? seekPosition(left.entries, leftIndex + 1, rightEntry.transactionIndex) : leftIndex + 1;
+                if (earlyJoinBounds) {
+                    double remainingUpper = matchedUpper + suffix[leftIndex];
+                    if ((exactBound ? remainingUpper : Math.nextUp(remainingUpper)) < conservativeLower) { earlyJoinsPruned++; return null; }
+                }
                 continue;
             }
             if (leftEntry.transactionIndex > rightEntry.transactionIndex) {
@@ -347,15 +373,42 @@ public final class PiHaupaMiner {
                 continue;
             }
             double utility = leftEntry.utility + rightEntry.utility - leftEntry.prefixUtility;
-            PiEntry entry = new PiEntry(leftEntry.transactionIndex, utility, leftEntry.utility);
+            PiEntry entry = new PiEntry(leftEntry.transactionIndex, utility, leftEntry.utility, rightEntry.lastItemUtility);
             entry.maximumRemainingUtility = Math.max(leftEntry.maximumRemainingUtility,
                     rightEntry.maximumRemainingUtility);
             combined.entries.add(entry);
             combined.sumUtility += utility;
+            if (exactBound) combined.projectedUtility += rightEntry.lastItemUtility;
+            if (earlyJoinBounds) {
+                matchedUpper += transactionMaximums[leftEntry.transactionIndex];
+                if (!exactBound) matchedUpper = Math.nextUp(matchedUpper);
+            }
             leftIndex++;
             rightIndex++;
         }
+        if (earlyJoinBounds) {
+            if (matchedUpper < conservativeLower) { earlyJoinsPruned++; return null; }
+            combined.auub = matchedUpper;
+        }
         return combined;
+    }
+
+    /** Cận suffix được cộng làm tròn lên: không làm giảm cận do sai số double.
+     * Khi giao dịch không khớp bị bỏ qua, suffix tự loại MU(T) tương ứng.
+     * Không dùng AU hoặc MAU theo thứ tự để loại node anh em.
+     */
+    private double[] suffixAuub(PiNode node) {
+        if (node.suffixAuub == null) {
+            double[] suffix = new double[node.entries.size() + 1];
+            boolean exactBound = unitExternalUtilities && allIntegerUtilities && totalTransactionUtility < 0x1.0p52;
+            for (int i = node.entries.size() - 1; i >= 0; i--) {
+                if ((i & 4095) == 0) checkCancelled();
+                double value = suffix[i + 1] + transactionMaximums[node.entries.get(i).transactionIndex];
+                suffix[i] = exactBound ? value : Math.nextUp(value);
+            }
+            node.suffixAuub = suffix;
+        }
+        return node.suffixAuub;
     }
 
     /** Ghép thích nghi: list lệch kích thước lớn thì nhảy bằng binary search.
@@ -498,6 +551,8 @@ public final class PiHaupaMiner {
         private final List<PiEntry> entries = new ArrayList<>();
         private double sumUtility;
         private double auub;
+        private double projectedUtility;
+        private double[] suffixAuub;
         private int maximumRemainingNumber;
 
         private PiNode(String item) {
@@ -509,12 +564,14 @@ public final class PiHaupaMiner {
         private final int transactionIndex;
         private final double utility;
         private final double prefixUtility;
+        private final double lastItemUtility;
         private double maximumRemainingUtility;
 
-        private PiEntry(int transactionIndex, double utility, double prefixUtility) {
+        private PiEntry(int transactionIndex, double utility, double prefixUtility, double lastItemUtility) {
             this.transactionIndex = transactionIndex;
             this.utility = utility;
             this.prefixUtility = prefixUtility;
+            this.lastItemUtility = lastItemUtility;
         }
     }
 
