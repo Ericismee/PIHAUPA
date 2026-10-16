@@ -18,6 +18,7 @@ public final class PiHaupaMiner {
     private double[] transactionMaximums;
     private double[][] pairUpperBounds;
     private final boolean earlyJoinBounds = Boolean.getBoolean("pihaupa.earlyJoin");
+    private final boolean suffixRemainingBound = Boolean.getBoolean("pihaupa.suffixRemainingBound");
     private boolean allIntegerUtilities = true;
     public void setProgress(java.util.function.Consumer<String> progress) { this.progress = progress; }
     private void reportProgress(String message) { progress.accept(message); }
@@ -189,6 +190,7 @@ public final class PiHaupaMiner {
         reportProgress("04 · Sắp xếp AUUB, tính MRU/MRN cho "+globalList.nodes().size()+" item.");
         restructure(globalList.nodes());
         reportProgress("05 · Mở rộng mẫu và cắt tỉa AUUB/MAU; đang tìm LARGE/PRE-LARGE.");
+        if (suffixRemainingBound) reportProgress("05 · Thử nghiệm cận suffix bổ sung đang bật; không phải MAU gốc của bài báo.");
         lastProgressNanos=System.nanoTime();
         patternExpansion(globalList.nodes(), new ArrayList<>());
         reportProgress("06 · Hoàn tất mở rộng; xây PT từ "+patternTree.size()+" mẫu đang giữ.");
@@ -321,7 +323,7 @@ public final class PiHaupaMiner {
                     continue;
                 }
                 // Cận chiếu chỉ duyệt item; kiểm tra trước MAU phải duyệt giao dịch.
-                if (!canExpandByMau(node, pattern.size(), lower)) {
+                if (!canExpandByRemainingBound(node, pattern.size(), lower)) {
                     node.entries = List.of();
                     prefix.remove(prefix.size() - 1);
                     continue;
@@ -437,8 +439,11 @@ public final class PiHaupaMiner {
             }
             double utility = leftEntry.utility + rightEntry.utility - leftEntry.prefixUtility;
             PiEntry entry = new PiEntry(leftEntry.transactionIndex, utility, leftEntry.utility, rightEntry.lastItemUtility);
-            entry.maximumRemainingUtility = Math.max(leftEntry.maximumRemainingUtility,
-                    rightEntry.maximumRemainingUtility);
+            // Mặc định: MRU ghép bằng max, đúng mô tả PIHAUPA trang 14.
+            // Chế độ thử nghiệm: cận suffix riêng chỉ giữ maximum sau right,
+            // vì DFS chỉ thêm item phía sau right. Không gán cận này cho tác giả.
+            entry.maximumRemainingUtility = suffixRemainingBound ? rightEntry.maximumRemainingUtility
+                    : Math.max(leftEntry.maximumRemainingUtility, rightEntry.maximumRemainingUtility);
             combined.entries.add(entry);
             combined.sumUtility += utility;
             if (exactBound) combined.projectedUtility += rightEntry.lastItemUtility;
@@ -489,20 +494,25 @@ public final class PiHaupaMiner {
         return low;
     }
 
-    /** MAU chỉ dùng để quyết định mở rộng. Mỗi số hạng không âm, nên khi tổng
+    /** Cận suffix bổ sung dùng cùng biểu thức với MAU, thay MRU bằng maximum
+     * trên suffix sau item cuối. MRN vẫn là cận trên số item còn lại. Vì suffix
+     * là tập con của remaining gốc, cận này không lớn hơn MAU của bài báo.
+     * Mặc định vẫn tính MAU gốc; chỉ chế độ thử nghiệm dùng cận suffix riêng.
+     * Mỗi số hạng không âm, nên khi tổng
      * đã đạt Sl×TU, các số hạng còn lại không thể đổi quyết định thành loại bỏ.
      * Dừng sớm phép kiểm tra, không sửa công thức MAU hay utility của mẫu.
      */
-    private boolean canExpandByMau(PiNode node, int patternLength, double lower) {
+    private boolean canExpandByRemainingBound(PiNode node, int patternLength, double lower) {
         double total = 0.0;
         int processed = 0;
         for (PiEntry entry : node.entries) {
+            double remaining = entry.maximumRemainingUtility;
             double average = entry.utility / patternLength;
-            if (entry.maximumRemainingUtility > average && node.maximumRemainingNumber > 0) {
-                total += (entry.utility + node.maximumRemainingNumber * entry.maximumRemainingUtility)
+            if (remaining > average && node.maximumRemainingNumber > 0) {
+                total += (entry.utility + node.maximumRemainingNumber * remaining)
                         / (patternLength + node.maximumRemainingNumber);
-            } else if (entry.maximumRemainingUtility > 0.0) {
-                total += (entry.utility + entry.maximumRemainingUtility) / (patternLength + 1.0);
+            } else if (remaining > 0.0) {
+                total += (entry.utility + remaining) / (patternLength + 1.0);
             }
             // Kiểm tra theo khối, tránh thêm một nhánh so sánh ở mỗi entry.
             if ((++processed & 63) == 0 && total >= lower) return true;

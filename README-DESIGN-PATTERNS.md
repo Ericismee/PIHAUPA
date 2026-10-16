@@ -307,6 +307,8 @@ Kết quả chính dùng median một số lẻ lượt (1/3/5); 3/5 có warm-up
 
 ## Vòng đời dữ liệu trong DFS
 
+**Cận suffix thử nghiệm:** `-Dpihaupa.suffixRemainingBound=true` trong [PiHaupaMiner](src/main/java/piHAUPA/PiHaupaMiner.java) dùng remaining maximum sau item cuối để chặn các mở rộng DFS. Mặc định tắt: phép ghép vẫn lấy max hai MRU theo PIHAUPA trang 14. Đây là biến thể cận triển khai, không thêm design pattern; xem README để biết chứng minh, số đo và tài liệu nghiên cứu. Không tích hợp time fading vì nó đổi bài toán utility và cần xét lại điều kiện quét lại.
+
 **Precomputation — bảng cận cặp:** [constructGlobalList và combine](src/main/java/piHAUPA/PiHaupaMiner.java) chuẩn bị C(a,b)=Σ MU(T) trên support của cặp. Mọi mẫu chứa cặp có AU≤C(a,b); nếu cận dưới Sₗ×TU, `combine` trả về trước khi cấp phát entry. Đây là kỹ thuật cắt tỉa triển khai, **không phải GoF pattern hoặc tuyên bố phát minh thuật toán mới**. Chỉ bật tự động khi phép cộng chính xác và chi phí chuẩn bị/bảng nằm trong giới hạn; xem README để bật/tắt đối chứng. Các điều kiện fallback chỉ ảnh hưởng hiệu năng, không thay đổi ngưỡng/kết quả.
 
 **Short-circuit evaluation:** trong `patternExpansion`, cận chiếu được xét trước bước quét giao dịch để tính MAU. `canExpandByMau` dừng khi tổng số hạng không âm đã đạt ngưỡng (kiểm tra mỗi 64 entry). Đây là cách đánh giá điều kiện tiết kiệm công việc, không đổi MAU của bài báo và không phải GoF design pattern. Nếu tổng chưa đạt ngưỡng, vẫn phải quét hết trước khi loại nhánh; không lấy mẫu hay ước lượng.
