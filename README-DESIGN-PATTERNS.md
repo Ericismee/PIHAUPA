@@ -307,6 +307,8 @@ Kết quả chính dùng median một số lẻ lượt (1/3/5); 3/5 có warm-up
 
 ## Vòng đời dữ liệu trong DFS
 
+**Short-circuit evaluation:** trong `patternExpansion`, cận chiếu được xét trước bước quét giao dịch để tính MAU. `canExpandByMau` dừng khi tổng số hạng không âm đã đạt ngưỡng (kiểm tra mỗi 64 entry). Đây là cách đánh giá điều kiện tiết kiệm công việc, không đổi MAU của bài báo và không phải GoF design pattern. Nếu tổng chưa đạt ngưỡng, vẫn phải quét hết trước khi loại nhánh; không lấy mẫu hay ước lượng.
+
 [PiHaupaMiner.patternExpansion](src/main/java/piHAUPA/PiHaupaMiner.java) bỏ tham chiếu đến entry của node cha ngay khi đã tạo xong các list con, trước khi đi sâu vào DFS. Entry của con là đối tượng riêng; các vòng ghép còn lại chỉ dùng node ở phía sau, nên dữ liệu cha không được đọc lại. Cách này giảm dữ liệu sống đồng thời và tạo cơ hội cho GC thu hồi sớm; không gọi `System.gc()` trong vòng lặp. Node cuối cũng bỏ bước quét MAU vì không còn item để mở rộng.
 
 Đây là quản lý vòng đời bộ nhớ, **không thêm vào số lượng GoF design pattern**. Tác dụng hiệu năng phải đo riêng: xem đối chứng NewConnects và fixture trong README; không cam kết phần trăm cho mọi ngưỡng/dataset.

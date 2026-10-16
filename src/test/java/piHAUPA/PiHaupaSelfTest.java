@@ -20,6 +20,7 @@ public final class PiHaupaSelfTest {
         verifiesOriginalAndTightComparison();
         verifiesUnsortedNonNumericTransactionIds();
         verifiesRandomSmallStreamsAgainstBruteForce();
+        verifiesDecimalPreLargeAgainstBruteForce();
         verifiesManagedTrieOnWideIncrement();
         verifiesTightRescanBoundaryAndAccumulation();
         verifiesPatternClassificationAtThresholds();
@@ -108,6 +109,31 @@ public final class PiHaupaSelfTest {
                 require(observed.keySet().equals(Set.of("E", "B", "BE")),
                         "Paper DB2 LARGE set mismatch.");
             }
+        }
+    }
+
+    /** Cắt nhánh và dừng kiểm tra MAU phải giữ cả PRE-LARGE, kể cả utility số thực. */
+    private static void verifiesDecimalPreLargeAgainstBruteForce() {
+        Random random = new Random(20261016L);
+        for (int trial = 0; trial < 24; trial++) {
+            Map<String, Double> external = new LinkedHashMap<>();
+            for (int i = 0; i < 6; i++) external.put("D" + i, trial % 2 == 0 ? 1.0 : 1.7);
+            List<Transaction> rows = new ArrayList<>();
+            for (int row = 0; row < 80; row++) {
+                Map<String, Double> values = new LinkedHashMap<>();
+                for (String item : external.keySet()) if (random.nextDouble() < 0.8)
+                    values.put(item, (1 + random.nextInt(100)) / 10.0);
+                if (values.isEmpty()) values.put("D0", 0.1);
+                rows.add(new Transaction("D" + row, values));
+            }
+            double lower = 0.025 + trial * 0.0013;
+            BatchResult actual = new PiHaupaMiner(external, lower * 2, lower)
+                    .processBatch(new Batch("DB0", rows));
+            Map<String, Double> retained = toMap(actual.largePatterns());
+            retained.putAll(toMap(actual.preLargePatterns()));
+            Map<String, Double> expected = bruteForceLarge(rows, external, lower);
+            require(retained.keySet().equals(expected.keySet()), "Decimal PRE-LARGE set mismatch: " + trial);
+            expected.forEach((key, value) -> require(close(value, retained.get(key)), "Decimal AU mismatch: " + key));
         }
     }
 

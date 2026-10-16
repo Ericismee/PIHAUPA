@@ -275,11 +275,16 @@ public final class PiHaupaMiner {
             }
 
             // Node cuối không còn item phía sau để mở rộng: tránh quét MAU vô ích.
-            double mau = i + 1 < currentList.size() ? maximumAverageUpperBound(node, pattern.size()) : 0.0;
-            if (mau >= lower && i + 1 < currentList.size()) {
+            if (i + 1 < currentList.size()) {
                 if (extensionPlan == null) extensionPlan = new ExtensionPlan(currentList);
                 if (!extensionPlan.canReach(node, pattern.size(), i + 1, lower)) {
                     extensionBranchesPruned++;
+                    node.entries = List.of();
+                    prefix.remove(prefix.size() - 1);
+                    continue;
+                }
+                // Cận chiếu chỉ duyệt item; kiểm tra trước MAU phải duyệt giao dịch.
+                if (!canExpandByMau(node, pattern.size(), lower)) {
                     node.entries = List.of();
                     prefix.remove(prefix.size() - 1);
                     continue;
@@ -439,8 +444,13 @@ public final class PiHaupaMiner {
         return low;
     }
 
-    private double maximumAverageUpperBound(PiNode node, int patternLength) {
+    /** MAU chỉ dùng để quyết định mở rộng. Mỗi số hạng không âm, nên khi tổng
+     * đã đạt Sl×TU, các số hạng còn lại không thể đổi quyết định thành loại bỏ.
+     * Dừng sớm phép kiểm tra, không sửa công thức MAU hay utility của mẫu.
+     */
+    private boolean canExpandByMau(PiNode node, int patternLength, double lower) {
         double total = 0.0;
+        int processed = 0;
         for (PiEntry entry : node.entries) {
             double average = entry.utility / patternLength;
             if (entry.maximumRemainingUtility > average && node.maximumRemainingNumber > 0) {
@@ -449,8 +459,10 @@ public final class PiHaupaMiner {
             } else if (entry.maximumRemainingUtility > 0.0) {
                 total += (entry.utility + entry.maximumRemainingUtility) / (patternLength + 1.0);
             }
+            // Kiểm tra theo khối, tránh thêm một nhánh so sánh ở mỗi entry.
+            if ((++processed & 63) == 0 && total >= lower) return true;
         }
-        return total;
+        return total >= lower;
     }
 
     private void addOrReplacePattern(List<String> pattern, double sumUtility) {

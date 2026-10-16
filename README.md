@@ -452,6 +452,10 @@ BUSY vẫn là phản hồi hợp lệ của API cho các client gửi đồng t
 
 ### Giảm bộ nhớ sống trong tìm kiếm DFS (16/10/2026)
 
+**Kiểm tra cận theo chi phí:** kiểm tra `ExtensionPlan.canReach` (duyệt item) trước MAU (duyệt entry giao dịch). MAU chỉ quyết định có mở rộng hay không; các số hạng không âm, nên khi tổng đã đạt Sₗ×TU có thể dừng kiểm tra. Kiểm tra theo khối 64 entry để giảm chi phí nhánh; khi chưa đạt ngưỡng vẫn cộng đến hết, giữ nguyên thứ tự tính.
+
+Đo bổ sung so với commit `0364ad5`, cùng quy trình 1 warm-up + 3 lượt: NewConnects 3,5%/3%, heap 512 MiB, median 4.797,31 → 4.593,53 ms (giảm khoảng 4,2%); fixture utility số thực 3.000 giao dịch/16 item, 2%/1%, heap 256 MiB: 256,21 → 241,90 ms (giảm khoảng 5,6%). SHA-256 kết quả từng batch khớp. Các mức chênh lệch nhỏ chịu ảnh hưởng lượt nền; không cộng phần trăm giữa các lần benchmark và không suy ra thời gian của ngưỡng đang chạy. Kiểm thử bổ sung vét cạn 24 bộ dữ liệu số thực đối chiếu cả HAUP và PRE-LARGE, EU=1 và EU=1,7.
+
 - Sau khi ghép xong các node con, giải phóng danh sách entry của node cha **trước khi** đệ quy. Các node con sở hữu entry riêng; các vòng tiếp theo chỉ ghép với node phía sau, nên không cần giữ lại danh sách đã xử lý.
 - Node cuối không còn phần mở rộng: bỏ lượt quét tính MAU. Trước phép ghép, kiểm tra cận AUUB bảo thủ để tránh cấp phát khi mọi siêu mẫu đều dưới ngưỡng PRE-LARGE.
 - Không đổi Sᵤ/Sₗ, điều kiện re-scan, tập HAUP/PRE-LARGE; không giới hạn số mẫu. Đây là kỹ thuật quản lý vòng đời dữ liệu, không phải design pattern GoF mới.
