@@ -18,6 +18,8 @@ public final class PiHaupaMiner {
     private double[] transactionMaximums;
     private double[][] pairUpperBounds;
     private final boolean earlyJoinBounds = Boolean.getBoolean("pihaupa.earlyJoin");
+    private final boolean lookAheadJoinRequested = Boolean.getBoolean("pihaupa.lookAheadJoin");
+    private boolean lookAheadJoinActive;
     private final boolean suffixRemainingBound = Boolean.getBoolean("pihaupa.suffixRemainingBound");
     private boolean allIntegerUtilities = true;
     public void setProgress(java.util.function.Consumer<String> progress) { this.progress = progress; }
@@ -233,13 +235,17 @@ public final class PiHaupaMiner {
         for (PiNode node : byItem.values()) node.pairPosition = pairPosition++;
         int[] pairItems = pairFilter ? new int[byItem.size()] : null;
         int[] pairCount = new int[1];
-        transactionMaximums = earlyJoinBounds ? new double[transactions.size()] : null;
+        // Cận dùng chung mọi nhánh/tệp, không phụ thuộc tên dataset. Mặc định
+        // tắt vì benchmark chưa chứng minh lợi ích thời gian trên NewConnects.
+        lookAheadJoinActive = lookAheadJoinRequested && unitExternalUtilities
+                && allIntegerUtilities && totalTransactionUtility < 0x1.0p52;
+        transactionMaximums = earlyJoinBounds || lookAheadJoinActive ? new double[transactions.size()] : null;
         int transactionIndex = 0;
         for (Transaction transaction : transactions) {
             checkCancelled();
             final int position = transactionIndex;
             pairCount[0] = 0;
-            if (earlyJoinBounds) transactionMaximums[position] = unitExternalUtilities ? transaction.unitMaximumUtility()
+            if (transactionMaximums != null) transactionMaximums[position] = unitExternalUtilities ? transaction.unitMaximumUtility()
                     : transaction.maximumUtility(externalUtilities);
             transaction.forEachUtility((item,internalUtility) -> {
                 PiNode node = byItem.get(item);
@@ -414,6 +420,9 @@ public final class PiHaupaMiner {
         // AUUB trên giao dịch chung chặn cả mẫu ghép và mọi siêu mẫu.
         // Suffix được dựng một lần khi node được dùng để ghép nhiều nhánh.
         boolean exactBound = unitExternalUtilities && allIntegerUtilities && totalTransactionUtility < 0x1.0p52;
+        boolean lookAhead = lookAheadJoinActive;
+        double leftPotential = left.auub;
+        double rightPotential = right.auub;
         double[] suffix = earlyJoinBounds ? suffixAuub(left) : null;
         double matchedUpper = 0.0;
         double conservativeLower = lower - Math.max(1.0, lower) * 1e-12;
@@ -424,6 +433,13 @@ public final class PiHaupaMiner {
             PiEntry leftEntry = left.entries.get(leftIndex);
             PiEntry rightEntry = right.entries.get(rightIndex);
             if (leftEntry.transactionIndex < rightEntry.transactionIndex) {
+                // Giao dịch này chắc chắn không thuộc mẫu ghép. Trừ MU khỏi
+                // cận của left; khi nhảy nhiều entry chỉ trừ entry đã biết,
+                // phần bỏ qua còn lại vẫn được giữ trong cận để bảo đảm an toàn.
+                if (lookAhead) {
+                    leftPotential -= transactionMaximums[leftEntry.transactionIndex];
+                    if (leftPotential < lower) { earlyJoinsPruned++; return null; }
+                }
                 leftIndex = left.entries.size() - leftIndex >= 8L * (right.entries.size() - rightIndex)
                         ? seekPosition(left.entries, leftIndex + 1, rightEntry.transactionIndex) : leftIndex + 1;
                 if (earlyJoinBounds) {
@@ -433,6 +449,10 @@ public final class PiHaupaMiner {
                 continue;
             }
             if (leftEntry.transactionIndex > rightEntry.transactionIndex) {
+                if (lookAhead) {
+                    rightPotential -= transactionMaximums[rightEntry.transactionIndex];
+                    if (rightPotential < lower) { earlyJoinsPruned++; return null; }
+                }
                 rightIndex = right.entries.size() - rightIndex >= 8L * (left.entries.size() - leftIndex)
                         ? seekPosition(right.entries, rightIndex + 1, leftEntry.transactionIndex) : rightIndex + 1;
                 continue;
@@ -447,14 +467,14 @@ public final class PiHaupaMiner {
             combined.entries.add(entry);
             combined.sumUtility += utility;
             if (exactBound) combined.projectedUtility += rightEntry.lastItemUtility;
-            if (earlyJoinBounds) {
+            if (earlyJoinBounds || lookAhead) {
                 matchedUpper += transactionMaximums[leftEntry.transactionIndex];
                 if (!exactBound) matchedUpper = Math.nextUp(matchedUpper);
             }
             leftIndex++;
             rightIndex++;
         }
-        if (earlyJoinBounds) {
+        if (earlyJoinBounds || lookAhead) {
             if (matchedUpper < conservativeLower) { earlyJoinsPruned++; return null; }
             combined.auub = matchedUpper;
         }

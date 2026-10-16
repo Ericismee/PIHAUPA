@@ -12,4 +12,7 @@ try {
         & java -ea -cp 'target/classes;target/test-classes' "piHAUPA.$testClass"
         if ($LASTEXITCODE -ne 0) { throw "$testClass failed." }
     }
+    # Đối chiếu vét cạn cận dừng ghép, kể cả khi không có bộ lọc cặp hỗ trợ.
+    & java -ea '-Dpihaupa.lookAheadJoin=true' '-Dpihaupa.pairFilter=false' -cp 'target/classes;target/test-classes' piHAUPA.PiHaupaSelfTest
+    if ($LASTEXITCODE -ne 0) { throw 'Look-ahead join correctness tests failed.' }
 } finally { Pop-Location; $env:PIHAUPA_RUN_ROOT=$testRunRootPrevious }
