@@ -2117,3 +2117,25 @@ main {
   display: block;
   color: var(--muted);
 }
+
+/* Cuộn trong biểu đồ, giữ nguyên bố cục trang và cỡ chữ khi có nhiều nhãn. */
+.chart-viewport {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+}
+.chart-viewport .chart {
+  display: block;
+  width: 100%;
+  max-width: none;
+}
+.chart-viewport:focus-visible {
+  outline: 2px solid var(--primary, #2563eb);
+  outline-offset: 2px;
+}
+.chart-dialog-content .chart-widget {
+  overflow-x: visible;
+}

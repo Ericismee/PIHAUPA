@@ -88,7 +88,12 @@ export function chart(
     </p>
   `;
 
-  const width = expanded ? Math.max(900, labels.length * 85) : 600;
+  // Mỗi nhãn có ô riêng; không ép nhãn cuối sát nhãn trước.
+  // Dùng khoảng rộng bảo thủ cho chữ 11px, giữ tên đầy đủ trong tooltip và bảng.
+  const longestLabel = Math.max(...labels.map((label) => String(label).length));
+  const labelChars = Math.min(longestLabel, expanded ? 32 : 20);
+  const slotWidth = Math.max(70, labelChars * 8 + 24);
+  const width = Math.max(expanded ? 900 : 600, labels.length * slotWidth + 83);
   const left = 65;
   const right = 18;
   const top = 22;
@@ -105,6 +110,7 @@ export function chart(
   let svg = `
     <svg
       class="chart"
+      style="min-width: ${width}px"
       viewBox="0 0 ${width} ${height}"
       role="img"
       aria-label="${esc(series.map((s) => s.name).join(', '))} theo ${esc(
@@ -135,10 +141,8 @@ export function chart(
     `;
   }
 
-  const labelStep = expanded ? 1 : Math.max(1, Math.ceil(labels.length / 7));
-
   labels.forEach((label, i) => {
-    if (i % labelStep !== 0 && i !== labels.length - 1) return;
+    label = String(label);
 
     svg += `
       <text
@@ -146,7 +150,7 @@ export function chart(
         y="${height - 13}"
         text-anchor="middle"
       >
-        ${esc(label.length > 17 ? label.slice(0, 15) + '…' : label)}
+        ${esc(label.length > labelChars ? label.slice(0, labelChars - 1) + '…' : label)}
         <title>${esc(label)}</title>
       </text>
     `;
@@ -395,11 +399,14 @@ export function chart(
           `
       }
       ${axes}
-      ${svg}
+      <div class="chart-viewport" tabindex="0" role="region" aria-label="Biểu đồ; cuộn ngang để xem các mốc">
+        ${svg.slice(0, svg.indexOf('</svg>') + 6)}
+      </div>
+      ${svg.slice(svg.indexOf('</svg>') + 6)}
       ${evidence}
       ${
-        !expanded && labelStep > 1
-          ? '<p class="source-note">Đã giãn nhãn để dễ đọc · Phóng to để xem đầy đủ các mốc.</p>'
+        !expanded && width > 600
+          ? '<p class="source-note">Cuộn ngang hoặc phóng to để xem toàn bộ biểu đồ.</p>'
           : ''
       }
     </div>
@@ -464,9 +471,6 @@ document.addEventListener('click', (event) => {
   `;
 
   dialog.setAttribute('aria-labelledby', 'chart-dialog-title');
-
-  const svg = dialog.querySelector('svg');
-  svg.style.minWidth = Math.max(850, data.labels.length * 85) + 'px';
 
   dialog.querySelector('.chart-close').onclick = () => dialog.close();
 
