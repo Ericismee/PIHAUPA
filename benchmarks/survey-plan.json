@@ -1,0 +1,8 @@
+{
+  "Accidents-metadata": { "upperFraction": 0.75, "lowerFraction": 0.6 },
+  "Chainstore-metadata": { "upperFraction": 0.15, "lowerFraction": 0.08 },
+  "NewChess-Metadata": { "upperFraction": 0.75, "lowerFraction": 0.6 },
+  "NewConnects-Metadata": { "upperFraction": 0.85, "lowerFraction": 0.7 },
+  "NewMushroom-Metadata": { "upperFraction": 0.6, "lowerFraction": 0.35 },
+  "Retail-metadata": { "upperFraction": 0.05, "lowerFraction": 0.02 }
+}

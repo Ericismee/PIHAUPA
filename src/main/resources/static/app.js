@@ -318,15 +318,27 @@ function thresholdLabels() {
 const thresholdLevels = {
   quick: [0.99, 0.98],
   balanced: [0.95, 0.9],
+  survey: [0.85, 0.7],
   overview: [0.7, 0.5],
   extended: [0.5, 0.3],
   deep: [0.25, 0.1],
+};
+// Ngưỡng khảo sát theo dữ liệu đã đo; không đổi công thức hay giới hạn số mẫu.
+const surveyLevels = {
+  accidents: [0.75, 0.6],
+  chainstore: [0.15, 0.08],
+  newchess: [0.75, 0.6],
+  newconnects: [0.85, 0.7],
+  newmushroom: [0.6, 0.35],
+  retail: [0.05, 0.02],
 };
 function applyThresholdMode() {
   const mode = $('threshold-mode').value;
   const dataset = state.datasets.find((d) => d.id === $('source').value);
   const profile = dataset?.profile;
   const paper = $('source').value === 'paper';
+  const survey =
+    surveyLevels[dataset?.name?.toLowerCase().replace('-metadata', '')] || thresholdLevels.survey;
   if (mode !== 'custom') {
     if (mode === 'reference') {
       $('su').value = paper ? 0.23 : profile.su;
@@ -334,7 +346,7 @@ function applyThresholdMode() {
     } else {
       // Mẫu bài báo: max AU(singleton) = 84, TU(DB) = 240.
       const ratio = paper ? 84 / 240 : profile.singletonAU / profile.totalTU;
-      const [upper, lower] = thresholdLevels[mode];
+      const [upper, lower] = mode === 'survey' ? survey : thresholdLevels[mode];
       $('su').value = upper * ratio;
       $('sl').value = lower * ratio;
     }
@@ -346,11 +358,13 @@ function applyThresholdMode() {
         ? 'Đo nhanh: Sᵤ = 99% r, Sₗ = 98% r; r = max AU(item đơn) / TU(DB). Ngưỡng cao có thể chỉ còn 1 HAUP. Dùng kiểm tra quy trình và số đo; không cam kết thời gian, không phải benchmark bài báo.'
         : mode === 'balanced'
           ? 'Cân bằng: Sᵤ = 95% r, Sₗ = 90% r. Đã đo toàn bộ 6 tệp đi kèm ở cấu hình 1 lượt, 80/10/10; số mẫu có thể ít. Thời gian phụ thuộc máy và cấu hình; không phải benchmark bài báo.'
-          : mode === 'reference'
-            ? paper
-              ? 'Ngưỡng ví dụ bài báo: 23% / 10%.'
-              : 'Ngưỡng khởi đầu cũ, sát mẫu mạnh nhất; có thể ít HAUP.'
-            : 'Khảo sát nhiều mẫu: 04 → 05 → 06. r = max AU(item đơn) / TU(DB). Hạ ngưỡng có thể tăng mạnh số PRE-LARGE, thời gian và RAM. Chọn 01 để đo nhanh hoặc 02 để cân bằng; đây không phải benchmark bài báo.';
+          : mode === 'survey'
+            ? `Khảo sát: Sᵤ = ${num(survey[0] * 100, 0)}% r, Sₗ = ${num(survey[1] * 100, 0)}% r; r = max AU(item đơn) / TU(DB). Chọn riêng từng tệp để có nhiều mẫu hơn. Thời gian phụ thuộc máy và cấu hình; ngân sách 15–20 phút không phải hạn giờ tự động.`
+            : mode === 'reference'
+              ? paper
+                ? 'Ngưỡng ví dụ bài báo: 23% / 10%.'
+                : 'Ngưỡng khởi đầu cũ, sát mẫu mạnh nhất; có thể ít HAUP.'
+              : 'Khảo sát sâu: 05 → 06 → 07. r = max AU(item đơn) / TU(DB). Hạ ngưỡng có thể tăng mạnh số PRE-LARGE, thời gian và RAM. Bắt đầu ở 02; chọn 01 hoặc 03 để chạy nhanh hơn. Đây không phải benchmark bài báo.';
   thresholdLabels();
 }
 function markCustomThreshold() {
@@ -396,7 +410,7 @@ function sourceChanged() {
   for (const option of $('threshold-mode').options) {
     option.disabled = !known && option.value !== 'custom';
   }
-  $('threshold-mode').value = value === 'paper' ? 'reference' : profile ? 'quick' : 'custom';
+  $('threshold-mode').value = value === 'paper' ? 'reference' : profile ? 'survey' : 'custom';
   applyThresholdMode();
   if (!state.busy) setRunPhase('IDLE');
   thresholdLabels();

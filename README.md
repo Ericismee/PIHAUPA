@@ -450,9 +450,39 @@ Thanh % trong Nhật ký tính theo mốc thực sự đã hoàn tất: 1 mốc 
 BUSY vẫn là phản hồi hợp lệ của API cho các client gửi đồng thời; web tự xử lý để nối lại tác vụ. Kiểm chứng/testcase dùng cùng worker gate, được chờ đến hoàn tất. ResourceMonitor khởi tạo trong try/finally để lỗi khởi tạo không bỏ lại khóa active. API trả HTTP status trong lỗi frontend để phân biệt ID hết hạn với lỗi mạng.
 
 
+### Khảo sát theo từng tệp, ngân sách tham khảo 15–20 phút (21/10/2026)
+
+Mặc định mới cho 6 tệp có profile là **02 · Khảo sát**, với **3 lượt đo + 1 warm-up**. Dữ liệu mẫu bài báo vẫn chọn ngưỡng 23%/10%; nguồn tải lên chưa có profile dùng ngưỡng nhập riêng. Không tăng/hạ ngưỡng trong khi lượt chạy đang thực hiện và không tự hủy lượt web khi đủ 20 phút. Ngân sách này là mức chấp nhận để khảo sát, không phải cam kết thời gian trên mọi máy hoặc mục tiêu cố kéo mọi tệp chạy đủ 20 phút.
+
+Các hệ số nhân r=max AU(item đơn)/TU(DB) được chọn riêng:
+
+- Accidents: Sᵤ=75% r, Sₗ=60% r.
+- Chainstore: Sᵤ=15% r, Sₗ=8% r.
+- NewChess: Sᵤ=75% r, Sₗ=60% r.
+- NewConnects: Sᵤ=85% r, Sₗ=70% r.
+- NewMushroom: Sᵤ=60% r, Sₗ=35% r.
+- Retail: Sᵤ=5% r, Sₗ=2% r.
+
+[Kế hoạch đo](benchmarks/survey-plan.json) và cấu hình UI được kiểm tra đồng bộ bằng `scripts/check-ui.cjs`. Mỗi lượt tính đầy đủ toàn tệp, 80/10/10, TIGHT, không bật đối chiếu Original. Công cụ benchmark nhập/hash tệp một lần, warm-up một lượt rồi tạo miner mới cho từng lượt đo; kiểm tra SHA-256 của toàn bộ HAUP/PRE-LARGE ở mọi batch giữa các lượt. `algorithmMs` là median ba lượt; `totalMs` là tổng đọc + warm-up + ba lượt + kiểm tra fingerprint, không phải thời gian một lượt. Không gồm ZIP/browser rendering.
+
+Đã hoàn tất toàn bộ phép đo, ba lượt đều khớp kết quả. Median **khai phá một lượt** và số mẫu cuối:
+
+- Accidents: **15,11 giây · 27 HAUP / 182 PRE-LARGE**.
+- Chainstore: **4,41 giây · 29 HAUP / 55 PRE-LARGE**.
+- NewChess: **1,28 giây · 130 HAUP / 2.688 PRE-LARGE**.
+- NewConnects: **75,12 giây · 71 HAUP / 7.900 PRE-LARGE**; toàn bộ đọc + warm-up + ba lượt và kiểm tra khoảng **300,84 giây**.
+- NewMushroom: **0,22 giây · 14 HAUP / 120 PRE-LARGE**.
+- Retail: **0,64 giây · 17 HAUP / 46 PRE-LARGE**.
+
+Tổng cả sáu phép đo lặp khoảng **401 giây**. Thiết bị/JVM và thời gian từng lượt, ngưỡng chính xác, SHA input/result có trong [JSON](benchmarks/survey-calibration.json) và [CSV](benchmarks/survey-calibration.csv). Tệp nhỏ không cần cố chạy đủ 15–20 phút. Chọn 3 lượt để có median, giữ cùng tỷ lệ dữ liệu/batch/ngưỡng khi so sánh; bật thêm đối chiếu hoặc đổi cấu hình có thể vượt thời gian đã đo.
+
+Tái lập sau khi build và biên dịch `QuickThresholdBench.java`: `python scripts/measure-quick-thresholds.py <DataRoot> --java <java.exe> --plan benchmarks/survey-plan.json --repetitions 3 --warmups 1 --timeout 1200 --output target/survey-calibration-repeated.json`. Ngân sách 1.200 giây áp dụng cho toàn bộ JVM benchmark của một tệp, kể cả warm-up và ba lượt; TIMEOUT/ERROR không được coi là kết quả khai phá hoàn tất. Log riêng từng tệp được ghi cạnh JSON/CSV. Chỉ JVM benchmark riêng bị dừng khi quá ngân sách; không đụng lượt web.
+
+Mức 75%/60% của NewConnects đã được thăm dò nhưng dừng trước khi hoàn tất để ưu tiên đo lặp cấu hình 85%/70% đã chạy xong. Không dùng PT/mẫu trung gian của lượt thăm dò làm kết quả cuối, và không suy ra rằng cấu hình đó chắc chắn vượt 20 phút. Đây là chọn ngưỡng để khảo sát, không phải tăng tốc thuật toán ở cùng ngưỡng hay benchmark tái hiện chính xác bài báo.
+
 ### Ngưỡng đo nhanh cho 6 tệp (21/10/2026)
 
-Giao diện chọn **01 · Đo nhanh** mặc định cho các tệp có profile đã kiểm tra; dữ liệu mẫu bài báo vẫn giữ 23%/10%, tệp tải lên chưa có profile vẫn nhập ngưỡng riêng. Đặt r=max AU(item đơn)/TU(DB). Đo nhanh dùng Sᵤ=0,99r/Sₗ=0,98r; **02 · Cân bằng** dùng 0,95r/0,90r. Đây là thay đổi phạm vi kết quả bằng ngưỡng, không phải tuyên bố tăng tốc thuật toán ở cùng ngưỡng. Ngưỡng cao có thể chỉ còn 1 HAUP. Các mức Tổng quan/Mở rộng/Chuyên sâu vẫn có thể chạy lâu.
+Giao diện giữ **01 · Đo nhanh** và **03 · Cân bằng** để kiểm tra nhanh. Đặt r=max AU(item đơn)/TU(DB). Đo nhanh dùng Sᵤ=0,99r/Sₗ=0,98r; Cân bằng dùng 0,95r/0,90r. Đây là thay đổi phạm vi kết quả bằng ngưỡng, không phải tuyên bố tăng tốc thuật toán ở cùng ngưỡng. Ngưỡng cao có thể chỉ còn 1 HAUP. Các mức Tổng quan/Mở rộng/Chuyên sâu vẫn có thể chạy lâu.
 
 Đã đo toàn tệp, chia 80/10/10, TIGHT, 1 lượt/JVM mới, không warm-up/đối chiếu, heap 2 GiB, Java 25.0.2, Ryzen 7 7840H; có lượt server chạy nền. Thời gian đọc/kiểm tra/SHA-256 và khai phá, theo thứ tự **Đo nhanh / Cân bằng**:
 

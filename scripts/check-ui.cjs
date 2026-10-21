@@ -141,9 +141,15 @@ console.log('PASS cancel UI, report module imports, alignment builder');
 // Preset selection must preserve arbitrary user thresholds and the paper reference.
 vm.runInContext(
   `
-state.datasets = [{id:'sample', profile:{su:.09,sl:.08,singletonAU:100,totalTU:1000}}];
+state.datasets = [{id:'sample', name:'NewConnects-Metadata', profile:{su:.09,sl:.08,singletonAU:100,totalTU:1000}}];
 $('source').value='sample';
 sourceChanged();
+if (Math.abs(Number($('su').value)-.085)>1e-12 || Math.abs(Number($('sl').value)-.07)>1e-12) throw Error('Catalog default survey');
+state.datasets[0].name='Chainstore-metadata';
+sourceChanged();
+if (Math.abs(Number($('su').value)-.015)>1e-12 || Math.abs(Number($('sl').value)-.008)>1e-12) throw Error('Dataset-specific survey');
+$('threshold-mode').value='quick';
+applyThresholdMode();
 if (Math.abs(Number($('su').value)-.099)>1e-12 || Math.abs(Number($('sl').value)-.098)>1e-12) throw Error('Catalog default quick');
 $('threshold-mode').value='balanced';
 applyThresholdMode();
@@ -166,6 +172,14 @@ if (Number($('su').value)!==.23 || Number($('sl').value)!==.1) throw Error('Pape
   ctx,
 );
 console.log('PASS selectable thresholds, exact custom values and paper reference');
+const surveyPlan = JSON.parse(fs.readFileSync('benchmarks/survey-plan.json', 'utf8'));
+const surveyRules = vm.runInContext('surveyLevels', ctx);
+for (const [name, rule] of Object.entries(surveyPlan)) {
+  const key = name.toLowerCase().replace('-metadata', '');
+  if (surveyRules[key]?.[0] !== rule.upperFraction || surveyRules[key]?.[1] !== rule.lowerFraction)
+    throw Error('UI and measured survey plan diverge: ' + name);
+}
+console.log('PASS all six survey presets match the benchmark plan');
 
 if (fs.existsSync('tmp/resource-result.json')) {
   ctx.result = JSON.parse(fs.readFileSync('tmp/resource-result.json', 'utf8'));
