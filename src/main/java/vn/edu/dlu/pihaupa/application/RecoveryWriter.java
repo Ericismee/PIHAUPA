@@ -116,12 +116,15 @@ public final class RecoveryWriter {
         StandardCharsets.UTF_8
       );
       Files.write(temp.resolve("process.log"), job.logLines(), StandardCharsets.UTF_8);
+      Set<String> names = new LinkedHashSet<>();
+      try (var entries = Files.list(temp)) {
+        entries.forEach(file -> names.add(file.getFileName().toString()));
+      }
+      names.add("counts.properties");
+      names.add("BAO_CAO.html");
       Files.writeString(
         temp.resolve("README.txt"),
-        "Kết quả cứu hộ từ AnalysisReport đã hoàn tất; không chạy lại thuật toán.\n" +
-          "Mỗi batch CSV chứa toàn bộ LARGE và PRE-LARGE đang quản lý. managed-patterns.csv chứa cả SMALL còn được quản lý nếu có.\n" +
-          "AU(P)=U(P)/|P|; LARGE: AU≥Su*TU; PRE-LARGE: Sl*TU≤AU<Su*TU.\n" +
-          "Số dòng và ngưỡng từng batch trong summary.json. Gói này thay cho báo cáo JSON/HTML khổng lồ bị hết heap.\n",
+        ExportGuide.readme(names),
         StandardCharsets.UTF_8
       );
       Files.writeString(
@@ -140,7 +143,7 @@ public final class RecoveryWriter {
             .filter(f -> !f.getFileName().toString().endsWith(".zip"))
             .sorted()
             .toList()) {
-            zip.putNextEntry(new ZipEntry(file.getFileName().toString()));
+            zip.putNextEntry(new ZipEntry(ExportGuide.path(file.getFileName().toString())));
             Files.copy(file, zip);
             zip.closeEntry();
           }

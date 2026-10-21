@@ -59,10 +59,11 @@ public final class RecoveryWriterTest {
     Path directory = RecoveryWriter.write(job);
     try (ZipFile zip = new ZipFile(directory.resolve("recovered-report.zip").toFile())) {
       if (
-        zip.getEntry("summary.json") == null || zip.getEntry("managed-patterns.csv") == null
+        zip.getEntry("05-du-lieu-ky-thuat/summary.json") == null ||
+        zip.getEntry("managed-patterns.csv") == null
       ) throw new AssertionError("missing recovery files");
       for (var batch : job.report.batches()) {
-        var entry = zip.getEntry("batch-" + batch.index() + "-patterns.csv");
+        var entry = zip.getEntry("02-tung-batch/batch-" + batch.index() + "-patterns.csv");
         try (
           var reader = new java.io.BufferedReader(
             new java.io.InputStreamReader(

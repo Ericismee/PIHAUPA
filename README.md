@@ -450,6 +450,22 @@ Thanh % trong Nhật ký tính theo mốc thực sự đã hoàn tất: 1 mốc 
 BUSY vẫn là phản hồi hợp lệ của API cho các client gửi đồng thời; web tự xử lý để nối lại tác vụ. Kiểm chứng/testcase dùng cùng worker gate, được chờ đến hoàn tất. ResourceMonitor khởi tạo trong try/finally để lỗi khởi tạo không bỏ lại khóa active. API trả HTTP status trong lỗi frontend để phân biệt ID hết hạn với lỗi mạng.
 
 
+### Gói báo cáo theo bước
+
+Giải nén toàn bộ ZIP rồi mở **BAO_CAO.html**. Báo cáo có mục lục 6 bước: Nguồn/cấu hình → TU/ngưỡng → Re-scan → Khai phá/PT → Đo lường → Kết luận cuối. Runtime theo batch dùng biểu đồ đường, heap quan sát dùng biểu đồ cột; số liệu tương ứng có bảng và đơn vị rõ ràng. Không vẽ chung runtime median một lượt với tổng CPU nhiều lượt. HTML chỉ preview tối đa 20 HAUP và 30 mẫu tài nguyên; CSV/JSON vẫn đầy đủ.
+
+Các file chính nằm ngay ngoài thư mục:
+
+- `BAO_CAO.html`: báo cáo để đọc và trình bày, kết luận ở cuối.
+- `BAO_CAO.txt`: thuyết minh/phép tính dạng văn bản.
+- `bao-cao.csv`: phép tính theo bước và batch, mở bằng Excel.
+- `patterns.csv`: PT cuối; lọc `type=LARGE` để lấy HAUP. Gói CSV lớn dùng `managed-patterns.csv` và CSV riêng từng batch.
+- `README.txt`: hướng dẫn bắt đầu, tên file, mục đích và giới hạn số đo.
+
+File chi tiết được gom vào `01-cau-hinh/` (manifest), `02-tung-batch/` (số liệu batch, AUUB, nhật ký), `03-do-luong/` (runtime từng lượt, CPU/RAM, mẫu tài nguyên), `04-kiem-chung/` (oracle/đối chiếu nếu có), `05-du-lieu-ky-thuat/` (report JSON/summary/metadata). Liên kết trong HTML trỏ tới đúng đường dẫn trong ZIP; không nhân đôi CSV lớn để giữ tên cũ. Mẫu số thời gian, đơn vị MiB/MB và ý nghĩa `NOT_CHECKED` được ghi rõ.
+
+Để chỉ sửa trình bày của một ZIP cũ có `report.json` đầy đủ, sau khi build chạy: `java -Xmx512m -cp target/classes vn.edu.dlu.pihaupa.application.RebuildReport <ZIP-gốc> <thư-mục-mới>`. Lệnh không gọi miner, không đọc input gốc và không ghi đè thư mục đích đã tồn tại. Các CSV/JSON/log được giữ nguyên nội dung, chỉ đổi thư mục; HTML/README được dựng lại. Công cụ giới hạn giải nén 128 MiB cho đường nhập lại trong RAM; gói dữ liệu lớn tiếp tục dùng đường xuất CSV tuần tự. Kiểm thử kiểm tra đủ bước, liên kết, số cột bảng, ZIP CRC, dữ liệu trước/sau và xuất 2 triệu dòng dưới heap 128 MiB.
+
 ### Khảo sát theo từng tệp, ngân sách tham khảo 15–20 phút (21/10/2026)
 
 Mặc định mới cho 6 tệp có profile là **02 · Khảo sát**, với **3 lượt đo + 1 warm-up**. Dữ liệu mẫu bài báo vẫn chọn ngưỡng 23%/10%; nguồn tải lên chưa có profile dùng ngưỡng nhập riêng. Không tăng/hạ ngưỡng trong khi lượt chạy đang thực hiện và không tự hủy lượt web khi đủ 20 phút. Ngân sách này là mức chấp nhận để khảo sát, không phải cam kết thời gian trên mọi máy hoặc mục tiêu cố kéo mọi tệp chạy đủ 20 phút.

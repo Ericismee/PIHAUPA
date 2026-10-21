@@ -203,103 +203,20 @@ public final class BulkReports {
   }
 
   public static String html(AnalysisService.Job job) {
-    var r = job.report;
-    var last = r.batches().get(r.batchCount() - 1);
-    StringBuilder out = new StringBuilder(
-      "<!doctype html><html lang='vi'><meta charset='utf-8'><title>Báo cáo PIHAUPA</title><style>body{font:15px system-ui;color:#243b55;max-width:1100px;margin:32px auto;padding:0 20px}table{border-collapse:collapse;width:100%;margin:20px 0}th,td{text-align:right;padding:12px;border-bottom:1px solid #dee5ee}th:first-child,td:first-child{text-align:left}h2{margin-top:28px}svg{width:100%;height:auto}.note{background:#f3f6fa;padding:16px;border-radius:8px}</style><h1>Báo cáo PIHAUPA</h1>"
-    );
-    out
-      .append("<p>")
-      .append(job.source.replace("&", "&amp;").replace("<", "&lt;"))
-      .append(" · ")
-      .append(r.transactionCount())
-      .append(" giao dịch</p>");
-    out.append(
-      "<p class='note'>AU(P)=U(P)/|P|. LARGE: AU≥Sᵤ×TU(DB). PRE-LARGE: Sₗ×TU(DB)≤AU&lt;Sᵤ×TU(DB). Toàn bộ mẫu nằm trong CSV từng batch; không rút gọn kết quả.</p>"
-    );
-    out.append(
-      "<table><tr><th>Batch</th><th>TU(DB)</th><th>Ngưỡng trên</th><th>Ngưỡng dưới</th><th>HAUP</th><th>PRE-LARGE</th><th>Runtime (s)</th><th>Heap (MB)</th></tr>"
-    );
-    for (var b : r.batches())
-      out
-        .append("<tr><td><a href='batch-")
-        .append(b.index())
-        .append("-patterns.csv'>")
-        .append(b.name().replace("&", "&amp;").replace("<", "&lt;"))
-        .append("</a></td><td>")
-        .append(b.totalTransactionUtility())
-        .append("</td><td>")
-        .append(b.minUtilUpper())
-        .append("</td><td>")
-        .append(b.minUtilLower())
-        .append("</td><td>")
-        .append(b.largePatterns().size())
-        .append("</td><td>")
-        .append(b.preLargePatterns().size())
-        .append("</td><td>")
-        .append(b.elapsedMs() / 1000)
-        .append("</td><td>")
-        .append(b.peakMemoryMb() * 1.048576)
-        .append("</td></tr>");
-    out.append("</table>");
-    for (boolean runtime : new boolean[] { true, false }) {
-      double max = 0;
-      for (var b : r.batches())
-        max = Math.max(max, runtime ? b.elapsedMs() / 1000 : b.peakMemoryMb() * 1.048576);
-      if (max == 0) max = 1;
-      out
-        .append("<h2>")
-        .append(runtime ? "Thời gian theo batch" : "Bộ nhớ theo batch")
-        .append("</h2><p>X: Batch · Y: ")
-        .append(runtime ? "Runtime (s)" : "JVM heap lấy mẫu (MB)")
-        .append(
-          "</p><svg viewBox='0 0 700 230' role='img'><path d='M65 15V190H680' fill='none' stroke='#bbc9db'/>"
-        );
-      StringBuilder points = new StringBuilder();
-      for (int i = 0; i < r.batches().size(); i++) {
-        var b = r.batches().get(i);
-        double x = 95 + (i * 550.0) / Math.max(1, r.batchCount() - 1),
-          v = runtime ? b.elapsedMs() / 1000 : b.peakMemoryMb() * 1.048576,
-          y = 185 - (v / max) * 155;
-        points.append(x).append(',').append(y).append(' ');
-        out
-          .append("<text x='")
-          .append(x)
-          .append("' y='212' text-anchor='middle' font-size='12'>")
-          .append(b.name().replace("&", "&amp;").replace("<", "&lt;"))
-          .append("</text><text x='")
-          .append(x)
-          .append("' y='")
-          .append(Math.max(12, y - 8))
-          .append("' text-anchor='middle' font-size='11'>")
-          .append(String.format(Locale.ROOT, "%.2f", v))
-          .append("</text>");
-        if (!runtime) out
-          .append("<rect x='")
-          .append(x - 14)
-          .append("' y='")
-          .append(y)
-          .append("' width='28' height='")
-          .append(190 - y)
-          .append("' fill='#2563eb'/>");
-      }
-      if (runtime) out
-        .append("<polyline points='")
-        .append(points)
-        .append("' fill='none' stroke='#2563eb' stroke-width='2'/>");
-      out.append("</svg>");
-    }
-    return out
-      .append("<h2>Kết luận cuối</h2><p>")
-      .append(last.largePatterns().size())
-      .append(" HAUP; ")
-      .append(r.stats().rescanCount())
-      .append(" re-scan (không gồm DB0). Ngưỡng HAUP=")
-      .append(last.minUtilUpper())
-      .append(
-        ".</p><p>Runtime không gồm đọc tệp. Heap là đỉnh lấy mẫu, khác RSS và bộ nhớ C++ trong bài báo.</p></html>"
+    Set<String> names = new LinkedHashSet<>(
+      List.of(
+        "BAO_CAO.html",
+        "managed-patterns.csv",
+        "manifest.json",
+        "measurements.json",
+        "oracle.json",
+        "process.log",
+        "summary.json",
+        "counts.properties"
       )
-      .toString();
+    );
+    for (var batch : job.report.batches()) names.add("batch-" + batch.index() + "-patterns.csv");
+    return ReportDocument.html(job, names, true);
   }
 
   public static String page(String id, int batch, String type, String search, int page)
