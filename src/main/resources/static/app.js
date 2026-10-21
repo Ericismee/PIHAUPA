@@ -316,6 +316,8 @@ function thresholdLabels() {
 
 // Các mức ngưỡng là cấu hình khảo sát, không giới hạn thời gian hay số mẫu trả về.
 const thresholdLevels = {
+  quick: [0.99, 0.98],
+  balanced: [0.95, 0.9],
   overview: [0.7, 0.5],
   extended: [0.5, 0.3],
   deep: [0.25, 0.1],
@@ -340,11 +342,15 @@ function applyThresholdMode() {
   $('threshold-note').textContent =
     mode === 'custom'
       ? 'Nhập tỷ lệ: 0,01 = 1%. Giữ nguyên ngưỡng bạn chọn; không tự tăng để chạy nhanh.'
-      : mode === 'reference'
-        ? paper
-          ? 'Ngưỡng ví dụ bài báo: 23% / 10%.'
-          : 'Ngưỡng khởi đầu cũ, sát mẫu mạnh nhất; có thể ít HAUP.'
-        : 'Khuyến nghị bắt đầu ở 02; thử 03 → 04 để mở rộng khảo sát. r = max AU(item đơn) / TU(DB). Đây là mức khảo sát của ứng dụng, không phải benchmark bài báo. Hạ ngưỡng có thể tăng số mẫu, thời gian và bộ nhớ.';
+      : mode === 'quick'
+        ? 'Đo nhanh: Sᵤ = 99% r, Sₗ = 98% r; r = max AU(item đơn) / TU(DB). Ngưỡng cao có thể chỉ còn 1 HAUP. Dùng kiểm tra quy trình và số đo; không cam kết thời gian, không phải benchmark bài báo.'
+        : mode === 'balanced'
+          ? 'Cân bằng: Sᵤ = 95% r, Sₗ = 90% r. Đã đo toàn bộ 6 tệp đi kèm ở cấu hình 1 lượt, 80/10/10; số mẫu có thể ít. Thời gian phụ thuộc máy và cấu hình; không phải benchmark bài báo.'
+          : mode === 'reference'
+            ? paper
+              ? 'Ngưỡng ví dụ bài báo: 23% / 10%.'
+              : 'Ngưỡng khởi đầu cũ, sát mẫu mạnh nhất; có thể ít HAUP.'
+            : 'Khảo sát nhiều mẫu: 04 → 05 → 06. r = max AU(item đơn) / TU(DB). Hạ ngưỡng có thể tăng mạnh số PRE-LARGE, thời gian và RAM. Chọn 01 để đo nhanh hoặc 02 để cân bằng; đây không phải benchmark bài báo.';
   thresholdLabels();
 }
 function markCustomThreshold() {
@@ -390,7 +396,7 @@ function sourceChanged() {
   for (const option of $('threshold-mode').options) {
     option.disabled = !known && option.value !== 'custom';
   }
-  $('threshold-mode').value = value === 'paper' ? 'reference' : profile ? 'overview' : 'custom';
+  $('threshold-mode').value = value === 'paper' ? 'reference' : profile ? 'quick' : 'custom';
   applyThresholdMode();
   if (!state.busy) setRunPhase('IDLE');
   thresholdLabels();

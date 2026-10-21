@@ -450,6 +450,23 @@ Thanh % trong Nhật ký tính theo mốc thực sự đã hoàn tất: 1 mốc 
 BUSY vẫn là phản hồi hợp lệ của API cho các client gửi đồng thời; web tự xử lý để nối lại tác vụ. Kiểm chứng/testcase dùng cùng worker gate, được chờ đến hoàn tất. ResourceMonitor khởi tạo trong try/finally để lỗi khởi tạo không bỏ lại khóa active. API trả HTTP status trong lỗi frontend để phân biệt ID hết hạn với lỗi mạng.
 
 
+### Ngưỡng đo nhanh cho 6 tệp (21/10/2026)
+
+Giao diện chọn **01 · Đo nhanh** mặc định cho các tệp có profile đã kiểm tra; dữ liệu mẫu bài báo vẫn giữ 23%/10%, tệp tải lên chưa có profile vẫn nhập ngưỡng riêng. Đặt r=max AU(item đơn)/TU(DB). Đo nhanh dùng Sᵤ=0,99r/Sₗ=0,98r; **02 · Cân bằng** dùng 0,95r/0,90r. Đây là thay đổi phạm vi kết quả bằng ngưỡng, không phải tuyên bố tăng tốc thuật toán ở cùng ngưỡng. Ngưỡng cao có thể chỉ còn 1 HAUP. Các mức Tổng quan/Mở rộng/Chuyên sâu vẫn có thể chạy lâu.
+
+Đã đo toàn tệp, chia 80/10/10, TIGHT, 1 lượt/JVM mới, không warm-up/đối chiếu, heap 2 GiB, Java 25.0.2, Ryzen 7 7840H; có lượt server chạy nền. Thời gian đọc/kiểm tra/SHA-256 và khai phá, theo thứ tự **Đo nhanh / Cân bằng**:
+
+- Accidents: **6,13 / 6,93 giây**.
+- Chainstore: **10,24 / 12,04 giây**.
+- NewChess: **0,41 / 0,47 giây**.
+- NewConnects: **2,09 / 2,78 giây**; kết quả cuối tương ứng **1 HAUP, 0 PRE-LARGE / 2 HAUP, 11 PRE-LARGE**.
+- NewMushroom: **0,36 / 0,35 giây**.
+- Retail: **1,17 / 1,23 giây**.
+
+Các lượt đều kiểm tra số giao dịch/TU và item đơn mạnh nhất trong HAUP cuối. Số đo không gồm xuất ZIP/hiển thị web, không bảo đảm cùng thời gian trên máy/cấu hình khác; thay số lượt đo, batch/OR hoặc bật đối chiếu có thể làm lâu hơn. Toàn bộ ngưỡng chính xác, SHA-256, số mẫu và thời gian riêng từng bước có trong [JSON](benchmarks/threshold-calibration.json) và [CSV](benchmarks/threshold-calibration.csv).
+
+Tái lập: build project, biên dịch `scripts/QuickThresholdBench.java` với classpath `target/classes` vào `target/bench`, rồi chạy `python scripts/measure-quick-thresholds.py <DataRoot> --java <java.exe>`. Chạy thêm `--upper-fraction .95 --lower-fraction .90 --output target/balanced-thresholds.json` cho mức Cân bằng. Script có ngân sách 30 giây/tệp, chỉ dừng JVM benchmark riêng khi hết thời gian và ghi TIMEOUT; không thay đổi/cắt kết quả hay hủy lượt web đang chạy.
+
 ### Giảm bộ nhớ sống trong tìm kiếm DFS (16/10/2026)
 
 **Dừng ghép theo cận còn lại — thử nghiệm, mặc định tắt:** `-Dpihaupa.lookAheadJoin=true` áp dụng trong `combine` cho mọi nhánh và mọi batch/tệp đủ điều kiện EU=1, utility nguyên, TU<2^52. Khi giao dịch của left/right chắc chắn không khớp, trừ MU(T) khỏi cận tương ứng; nếu cận còn lại dưới Sₗ×TU, dừng ghép. Nếu binary seek bỏ nhiều entry, chỉ trừ entry đã biết, giữ phần còn lại trong cận để không đánh giá thấp. Kết thúc ghép, tính AUUB chính xác trên giao dịch chung để truyền cho các mức con. Không dựng mảng suffix riêng cho mỗi node; chỉ dùng một mảng MU theo vị trí giao dịch cho mỗi lần initial scan/re-scan. Ngoài điều kiện cộng chính xác, tự dùng merge cũ.

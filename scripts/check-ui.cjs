@@ -144,7 +144,13 @@ vm.runInContext(
 state.datasets = [{id:'sample', profile:{su:.09,sl:.08,singletonAU:100,totalTU:1000}}];
 $('source').value='sample';
 sourceChanged();
-if (Math.abs(Number($('su').value)-.07)>1e-12) throw Error('Catalog default overview');
+if (Math.abs(Number($('su').value)-.099)>1e-12 || Math.abs(Number($('sl').value)-.098)>1e-12) throw Error('Catalog default quick');
+$('threshold-mode').value='balanced';
+applyThresholdMode();
+if (Math.abs(Number($('su').value)-.095)>1e-12 || Math.abs(Number($('sl').value)-.09)>1e-12) throw Error('Balanced threshold');
+$('threshold-mode').value='overview';
+applyThresholdMode();
+if (Math.abs(Number($('su').value)-.07)>1e-12) throw Error('Overview threshold changed');
 $('threshold-mode').value='extended';
 applyThresholdMode();
 if (Math.abs(Number($('su').value)-.05)>1e-12) throw Error('Extended threshold');
