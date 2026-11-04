@@ -53,3 +53,7 @@ for (const count of [1, 3, 12, 20, 100]) {
 console.log(
   'PASS chart layout: 1/3/12/20/100 categories, bar/line, inline/expanded, full labels in tables',
 );
+
+const tinyTicks = vm.runInContext('[0,.00001,.00002,.00003,.00004].map(compact)', ctx);
+assert.equal(new Set(tinyTicks).size, 5, 'Small runtime axis ticks must remain distinct');
+console.log('PASS sub-millisecond runtime axis labels stay distinct');

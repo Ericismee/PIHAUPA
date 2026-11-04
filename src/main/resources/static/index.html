@@ -31,11 +31,9 @@
       </div>
       <p class="nav-label">KHAI PHÁ</p>
       <nav aria-label="Điều hướng chính">
-        <a href="#overview" data-page="overview"
-          ><span data-icon="overview"></span>Phân tích & kết quả</a
-        >
+        <a href="#overview" data-page="overview"><span data-icon="overview"></span>Khai phá HAUP</a>
         <a href="#measurements" data-page="measurements"
-          ><span data-icon="measurements"></span>Hiệu năng</a
+          ><span data-icon="measurements"></span>Đánh giá hiệu năng</a
         >
         <a href="#verification" data-page="verification"
           ><span data-icon="verification"></span>Đối chiếu bài báo</a
@@ -82,7 +80,7 @@
             aria-expanded="false"
             aria-controls="notifications-panel"
           >
-            <span class="status-dot"></span><span id="workspace-state">Local workspace</span
+            <span class="status-dot"></span><span id="workspace-state">Sẵn sàng</span
             ><span id="notification-count" class="notification-count" hidden>0</span>
           </button>
           <section
@@ -104,21 +102,20 @@
       <main id="main" tabindex="-1">
         <div class="page-heading">
           <div>
-            <div class="eyebrow">KHAI PHÁ DỮ LIỆU TĂNG DẦN</div>
-            <h1 id="page-title">Phân tích PIHAUPA</h1>
+            <h1 id="page-title">Khai phá HAUP</h1>
             <p id="page-description">Từ dữ liệu giao dịch đến mẫu tiện ích trung bình cao.</p>
           </div>
           <div class="heading-actions">
-            <button class="button" id="export-zip" disabled>Gói báo cáo ZIP</button
+            <button class="button" id="export-zip" disabled>Xuất ZIP</button
             ><button class="button" id="export" disabled>
-              <span data-icon="download"></span>Xuất báo cáo CSV</button
-            ><button class="button" id="export-txt" disabled>TXT</button>
+              <span data-icon="download"></span>Xuất CSV</button
+            ><button class="button" id="export-txt" disabled>Xuất TXT</button>
           </div>
         </div>
         <section id="run-panel" class="run-panel compact-run" aria-labelledby="run-title">
           <div class="run-intro">
-            <h2 id="run-title">Cấu hình phân tích</h2>
-            <span id="source-kind" class="tag blue">Dữ liệu mẫu bài báo</span>
+            <h2 id="run-title">Thiết lập khai phá</h2>
+            <span id="source-kind" class="tag blue" hidden>Dữ liệu mẫu bài báo</span>
           </div>
           <form id="run-form" novalidate>
             <div class="field source-field">
@@ -132,7 +129,7 @@
               <label for="su">Sᵤ <small id="su-percent">23%</small></label
               ><input
                 id="su"
-                aria-label="Ngưỡng trên Su"
+                aria-label="Ngưỡng trên Sᵤ"
                 type="number"
                 min="0.000001"
                 max="1"
@@ -145,7 +142,7 @@
               <label for="sl">Sₗ <small id="sl-percent">10%</small></label
               ><input
                 id="sl"
-                aria-label="Ngưỡng dưới Sl"
+                aria-label="Ngưỡng dưới Sₗ"
                 type="number"
                 min="0.000001"
                 max="1"
@@ -170,21 +167,21 @@
               </div>
             </div>
             <div class="threshold-picker">
-              <label for="threshold-mode">Mức ngưỡng</label>
+              <label for="threshold-mode">Ngưỡng gợi ý</label>
               <select id="threshold-mode">
                 <option value="quick">01 · Đo nhanh · 99% / 98% r</option>
-                <option value="survey">02 · Khảo sát · Khuyến nghị · Theo từng tệp</option>
+                <option value="survey">02 · Khảo sát theo tệp · Khuyến nghị</option>
                 <option value="balanced">03 · Cân bằng · 95% / 90% r</option>
-                <option value="reference">04 · Tham chiếu nguồn</option>
+                <option value="reference">04 · Theo ví dụ nguồn</option>
                 <option value="overview">05 · Tổng quan · 70% / 50% r</option>
                 <option value="extended">06 · Mở rộng · 50% / 30% r</option>
-                <option value="deep">07 · Chuyên sâu · Có thể chạy lâu · 25% / 10% r</option>
+                <option value="deep">07 · Khảo sát sâu · 25% / 10% r</option>
                 <option value="custom">08 · Tự nhập Sᵤ / Sₗ</option>
               </select>
               <p id="threshold-note" class="subtle" aria-live="polite"></p>
             </div>
             <details id="run-options" class="run-options">
-              <summary>Cấu hình thực nghiệm</summary>
+              <summary>Tùy chọn thực nghiệm</summary>
               <div class="options-body">
                 <div class="config-grid">
                   <input type="hidden" id="repeats" value="1" />
@@ -201,13 +198,13 @@
                     </select></label
                   >
                   <label class="config-field" for="insertion-steps"
-                    >Chia batch<select id="insertion-steps">
+                    >Phân chia dữ liệu<select id="insertion-steps">
                       <option value="0">Mặc định của nguồn</option>
                       <option value="9">OR + 9 lần chèn</option>
                     </select></label
                   >
                   <label class="config-field" for="original-ratio"
-                    >OR · tỷ lệ DB0<select id="original-ratio">
+                    >Tỷ lệ dữ liệu ban đầu (OR)<select id="original-ratio">
                       <option value="0.82">82% · dữ liệu dày</option>
                       <option value="0.955">95,5% · Bms-pos</option>
                       <option value="0.998">99,8% · Chainstore</option>
@@ -255,7 +252,7 @@
         </section>
         <details id="progress-panel" class="progress process-log" hidden open>
           <summary>
-            Nhật ký quy trình chạy
+            Nhật ký thực thi
             <span id="run-elapsed-summary" class="run-elapsed">00:00:00</span>
           </summary>
           <div class="run-progress-header">
@@ -279,7 +276,7 @@
         <div id="content"></div>
         <footer class="footer">
           <span>PIHAUPA Research Lab <span class="footer-dot">·</span> Java 17+</span
-          ><span>Số liệu thực tế từ lõi Java · Không dùng dữ liệu biểu đồ giả</span>
+          ><span>PIHAUP-List · Tight re-scan</span>
         </footer>
       </main>
     </div>

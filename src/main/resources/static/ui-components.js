@@ -18,14 +18,19 @@ export const icon = (name) =>
   `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[name] || icons.overview}"/></svg>`;
 export const badge = (text, kind = 'neutral') => `<span class="tag ${kind}">${esc(text)}</span>`;
 export const card = (title, subtitle, body, extra = '') =>
-  `<section class="card"><div class="card-head"><div><h2>${title}</h2><p>${subtitle}</p></div>${extra}</div><div class="card-body">${body}</div></section>`;
+  `<section class="card"><div class="card-head"><div><h2>${title}</h2>${subtitle ? `<p>${subtitle}</p>` : ''}</div>${extra}</div><div class="card-body">${body}</div></section>`;
+const metricTerms = {
+  'Thời gian thực thi': 'Runtime',
+  'Bộ nhớ sử dụng': 'Memory Usage',
+  'Số lần re-scan': '#Re-scans',
+};
 export const kpi = (title, value, note, ico = 'overview', unit = '') =>
-  `<div class="card kpi"><div class="kpi-top">${title}${icon(ico)}</div><div class="kpi-value">${value}<small>${unit}</small></div><div class="kpi-note">${note}</div></div>`;
+  `<div class="card kpi"><div class="kpi-top" title="${esc(metricTerms[title] || title)}">${title}${icon(ico)}</div><div class="kpi-value">${value}<small>${unit}</small></div><div class="kpi-note">${note}</div></div>`;
 export const notice = (text) => `<div class="notice">${icon('info')}<div>${text}</div></div>`;
 export const last = (report) => report.batches.at(-1);
 export function action(batch) {
   return batch.index === 0
-    ? badge('Initial scan', 'blue')
+    ? badge('Quét ban đầu', 'blue')
     : batch.rescanTriggered
       ? badge('Re-scan', 'amber')
       : badge('Cập nhật PT', 'green');
@@ -48,7 +53,7 @@ export function table(headers, rows, caption = '') {
       });
     })
     .join('');
-  return `<div class="table-wrap"><table class="data-table"><caption>${caption || 'Bảng · ' + headers.slice(0, 3).join(' / ')}</caption><thead><tr>${headers.map((h, i) => `<th scope="col" class="${numericColumns[i] ? 'column-number' : 'column-text'}">${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
+  return `<div class="table-wrap"><table class="data-table"><caption>${caption || headers.slice(0, 3).join(' / ')}</caption><thead><tr>${headers.map((h, i) => `<th scope="col" class="${numericColumns[i] ? 'column-number' : 'column-text'}">${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 export const tr = (values) =>
   `<tr>${values.map((v) => `<td class="${typeof v === 'number' || /^-?[0-9][0-9., ]*$/.test(String(v)) ? 'numeric' : ''}">${v}</td>`).join('')}</tr>`;

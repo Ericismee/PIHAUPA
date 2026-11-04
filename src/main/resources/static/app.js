@@ -16,6 +16,8 @@ import { auEvidence, finalConclusion, verificationBadges, manifestPanel } from '
 import { notifyStatus } from './notifications.js';
 
 const $ = (id) => document.getElementById(id);
+const runtimeSeconds = (milliseconds) =>
+  num(milliseconds / 1000, milliseconds > 0 && milliseconds < 1 ? 6 : 3);
 
 function setSidebarHidden(hidden) {
   document.body.classList.toggle('sidebar-hidden', hidden);
@@ -52,23 +54,23 @@ document.querySelectorAll('#sidebar nav a').forEach((link) => {
   }
 });
 const pages = {
-  overview: ['Phân tích & kết quả', 'Cấu hình → xử lý từng batch → tập HAUP cuối.'],
+  overview: ['Khai phá HAUP', 'Khai phá mẫu tiện ích trung bình cao trên dữ liệu tăng dần.'],
   batches: ['Phân tích từng bước', 'Theo dõi utility, ngưỡng phân loại và tập mẫu qua mỗi batch.'],
   rescan: [
     'Quyết định re-scan',
     'Giải thích điều kiện Tight bằng số liệu tích lũy từ lần full scan gần nhất.',
   ],
   patterns: ['Kết quả khai phá', 'Tra cứu các mẫu đang quản lý và tiện ích trung bình thực tế.'],
-  measurements: ['Hiệu năng', 'Thời gian, bộ nhớ và re-scan theo điều kiện thực nghiệm.'],
+  measurements: ['Đánh giá hiệu năng', 'Thời gian thực thi, bộ nhớ sử dụng và số lần re-scan.'],
   datasets: [
     'Bộ dữ liệu thực nghiệm',
     'Đọc trực tiếp transactions.txt; mỗi bộ dữ liệu được phân tích độc lập.',
   ],
-  testcases: [
-    'Kiểm thử phần mềm',
-    'Chạy test thật, xem đầu vào, kết quả kỳ vọng và lỗi của từng case.',
+  testcases: ['Kiểm thử phần mềm', 'Kiểm tra kết quả, dữ liệu đầu vào và các trường hợp ngoại lệ.'],
+  verification: [
+    'Đối chiếu bài báo',
+    'Giá trị tham chiếu và kết quả thực thi trên ví dụ của bài báo.',
   ],
-  verification: ['Đối chiếu bài báo', 'Đối chiếu dữ liệu Tables 2–3, tập HAUP và hành vi re-scan.'],
   runs: [
     'Hồ sơ thực nghiệm',
     'Các lượt hoàn tất đã lưu trên máy; mở lại cấu hình, kết quả và số đo.',
@@ -124,13 +126,13 @@ function setRunPhase(phase) {
       ? 'Có lỗi xử lý'
       : phase === 'COMPLETED'
         ? 'Phân tích hoàn tất'
-        : 'Local workspace';
+        : 'Sẵn sàng';
 }
 const phases = {
   READING: 'Đang đọc dữ liệu',
   MINING: 'Đọc hoàn tất · đang khai phá',
   COMPARING: 'Khai phá hoàn tất · đang đối chiếu',
-  REPORTING: 'Đang dựng báo cáo',
+  REPORTING: 'Đang tạo báo cáo',
   COMPLETED: 'Xử lý hoàn tất',
   FAILED: 'Xử lý thất bại',
   CANCELLING: 'Đang hủy an toàn',
@@ -185,9 +187,8 @@ function updateRunProgress(status) {
   $('run-progress-count').textContent = status.totalSteps
     ? status.completedSteps + '/' + status.totalSteps + ' mốc'
     : 'Chưa xác định tổng mốc';
-  $('run-progress-note').textContent =
-    status.progressBasis ||
-    'Tiến độ theo mốc xử lý; không phải phần trăm thời gian hoặc số mẫu đã duyệt.';
+  $('run-progress-note').textContent = 'Tiến độ theo mốc xử lý, không phải tỷ lệ thời gian.';
+  $('run-progress-note').title = status.progressBasis || '';
   bar.dataset.state = status.state;
 }
 
@@ -855,7 +856,7 @@ function renderOverview(target) {
   const c = state.current,
     r = c.report;
   target.innerHTML =
-    `<div class="kpi-grid">${kpi('Giao dịch', num(r.transactionCount, 0), num(r.batchCount, 0) + ' batch · ' + num(r.upperBounds.length, 0) + ' item', 'datasets')}${kpi('Thời gian khai phá', num(r.elapsedMs / 1000), 'Không gồm đọc tệp', 'clock', 's')}${kpi('Re-scan', num(r.stats.rescanCount, 0), 'Không tính quét ban đầu DB0', 'rescan')}${kpi('Ngưỡng Sᵤ / Sₗ', num(r.upperThreshold * 100, 4) + ' / ' + num(r.lowerThreshold * 100, 4), 'Tỷ lệ trên TU(DB)', 'patterns', '%')}</div>` +
+    `<div class="kpi-grid">${kpi('Giao dịch', num(r.transactionCount, 0), num(r.batchCount, 0) + ' batch · ' + num(r.upperBounds.length, 0) + ' item', 'datasets')}${kpi('Thời gian thực thi', runtimeSeconds(r.elapsedMs), 'Không gồm đọc tệp', 'clock', 's')}${kpi('Số lần re-scan', num(r.stats.rescanCount, 0), 'Không tính quét ban đầu DB0', 'rescan')}${kpi('Ngưỡng Sᵤ / Sₗ', num(r.upperThreshold * 100, 4) + ' / ' + num(r.lowerThreshold * 100, 4), 'Tỷ lệ trên TU(DB)', 'patterns', '%')}</div>` +
     `<div class="two-col equal-col">${card(
       'Số mẫu theo batch',
       'LARGE / HAUP và PRE-LARGE đang quản lý',
@@ -931,7 +932,7 @@ function renderBatches(target) {
           action(b),
         ]),
       ),
-      'Bảng · Tính toán và kết quả từng batch',
+      'Tính toán và kết quả từng batch',
     ) +
     `<div class="batch-calculations">${r.batches.map((b) => `<details class="batch-calculation"><summary><strong>${esc(b.name)}</strong><span>${b.index === 0 ? 'Quét ban đầu' : b.rescanTriggered ? 'Re-scan' : 'Cập nhật PT'}</span><span class="subtle">Xem phép tính</span></summary><div class="batch-calculation-body"><div><h3>Utility & ngưỡng</h3><div class="metric-row"><span>TU(batch) / MU(batch)</span><strong>${num(b.batchTransactionUtility)} / ${num(b.batchMaximumUtility)}</strong></div><div class="formula">LARGE: ${num(r.upperThreshold, 6)} × ${num(b.totalTransactionUtility)} = <strong>${num(b.minUtilUpper)}</strong><br>Ngưỡng dưới: ${num(r.lowerThreshold, 6)} × ${num(b.totalTransactionUtility)} = <strong>${num(b.minUtilLower)}</strong><br>PRE-LARGE: ${num(b.minUtilLower)} ≤ AU(P) &lt; ${num(b.minUtilUpper)}</div></div>${batchDecision(b, r)}</div></details>`).join('')}</div>` +
     card(
@@ -1059,8 +1060,8 @@ function batchDecision(b, r) {
 function renderAnalysis() {
   $('content').innerHTML =
     reportNote() +
-    `<nav class="analysis-guide" aria-label="Mục lục báo cáo"><a href="#analysis-summary">Tổng quan</a><span class="guide-arrow">→</span><a href="#analysis-batches">Tính toán & re-scan</a><span class="guide-arrow">→</span><a href="#analysis-patterns">Mẫu khai phá</a><span class="guide-arrow">→</span><a href="#analysis-final">Kết luận cuối</a></nav>
-    <section id="analysis-summary" class="analysis-section"><div class="analysis-heading"><h2><span class="report-step">01</span>Tổng quan</h2></div><div id="summary-content"></div><details class="report-detail"><summary>Hiệu năng theo tiến trình chèn</summary><p class="subtle">Runtime dạng đường, memory usage dạng cột như Fig. 8–9. Số liệu từ lượt Java hiện tại.</p>${insertionCharts(state.current)}</details></section>
+    `<nav class="analysis-guide" aria-label="Mục lục báo cáo"><a href="#analysis-summary">Tổng quan</a><span class="guide-arrow">→</span><a href="#analysis-batches">Tính toán & re-scan</a><span class="guide-arrow">→</span><a href="#analysis-patterns">Mẫu khai phá</a><span class="guide-arrow">→</span><a href="#analysis-final">Kết quả cuối</a></nav>
+    <section id="analysis-summary" class="analysis-section"><div class="analysis-heading"><h2><span class="report-step">01</span>Tổng quan</h2></div><div id="summary-content"></div><details class="report-detail"><summary>Hiệu năng theo tiến trình chèn</summary>${insertionCharts(state.current)}</details></section>
     <section id="analysis-batches" class="analysis-section"><div class="analysis-heading"><div><h2><span class="report-step">02</span>Tính toán & re-scan</h2><p>Đọc bảng từ DB0 đến batch cuối. Mở từng batch để xem phép tính.</p></div></div><div id="batches-content"></div></section>
     <section id="analysis-patterns" class="analysis-section"><div class="analysis-heading"><div><h2><span class="report-step">03</span>Mẫu khai phá</h2><p>Lọc LARGE / HAUP và PRE-LARGE theo batch.</p></div></div><div id="patterns-content"></div></section>` +
     finalConclusion(state.current);
@@ -1149,7 +1150,7 @@ async function renderPatterns(target, remote = null) {
           num(b.minUtilUpper),
         ]),
       ),
-      'Bảng · Mẫu trong PT — LARGE / PRE-LARGE',
+      'Mẫu trong PT — LARGE / PRE-LARGE',
     )}<div class="table-footer"><span>${patterns.length ? num(remote?.total ?? patterns.length, 0) + ' mẫu · Trang ' + (state.patternPage + 1) + '/' + pages : '0 mẫu · đã xử lý dữ liệu'}</span><div><button class="button" id="previous" ${patterns.length === 0 ? 'hidden' : ''} ${state.patternPage === 0 ? 'disabled' : ''}>Trước</button> <button class="button" id="next" ${patterns.length === 0 ? 'hidden' : ''} ${state.patternPage >= pages - 1 ? 'disabled' : ''}>Sau</button></div></div></section>`;
   $('batch-select').onchange = (e) => {
     state.batchIndex = Number(e.target.value);
@@ -1204,11 +1205,11 @@ function renderResourceMeasurements(c) {
         )
       : '') +
       table(
-        ['Lượt đo', 'Runtime (ms)', 'Đỉnh heap quan sát (MiB)'],
+        ['Lượt đo', 'Thời gian thực thi (ms)', 'Đỉnh heap quan sát (MiB)'],
         (c.measurement.runMeasurements || []).map((r, i) =>
           tr([i + 1, num(r.runtimeMs), num(r.heapPeakMiB)]),
         ),
-        'Bảng · Runtime và heap từng lượt',
+        'Runtime và heap từng lượt',
       ) +
       `<details class="manifest-panel"><summary>Số đo bộ nhớ theo thời điểm · ${(resources.samples || []).length} mẫu</summary>${table(
         [
@@ -1221,7 +1222,7 @@ function renderResourceMeasurements(c) {
         ],
         (resources.samples || []).map((r) =>
           tr([
-            num(r.elapsedMs / 1000),
+            runtimeSeconds(r.elapsedMs),
             value(r.heapUsedMiB),
             value(r.heapCommittedMiB),
             value(r.processResidentMiB),
@@ -1229,7 +1230,7 @@ function renderResourceMeasurements(c) {
             value(r.systemTotalMiB),
           ]),
         ),
-        'Bảng · Bộ nhớ lấy mẫu',
+        'Bộ nhớ lấy mẫu',
       )}</details><p class="subtle">Lấy mẫu khoảng 1 giây; đỉnh quan sát có thể bỏ lỡ đỉnh ngắn. RAM toàn máy gồm ứng dụng khác. RAM Java chỉ tính tiến trình server, không gồm JVM con Original/Tight.</p>`,
   );
 }
@@ -1254,7 +1255,7 @@ function renderSizeMeasurements() {
         'Giao dịch',
         'Sᵤ / Sₗ',
         'Lượt đo',
-        'Runtime (ms)',
+        'Thời gian thực thi (ms)',
         'Đỉnh heap (MiB)',
         'RAM tiến trình (MiB)',
         'HAUP',
@@ -1273,7 +1274,7 @@ function renderSizeMeasurements() {
           patternCount(last(c.report), 'LARGE'),
         ]),
       ),
-      'Bảng · Các trường hợp kích thước',
+      'Các trường hợp kích thước',
     ),
     '<button class="button" id="export-sizes">Xuất so sánh kích thước CSV</button>',
   );
@@ -1293,8 +1294,8 @@ function insertionCharts(c) {
       values: report.batches.map(field),
     }));
   return `<div class="two-col equal-col">${card(
-    'Thời gian theo tiến trình chèn',
-    'Thời gian xử lý từng batch',
+    'Thời gian thực thi',
+    'Theo tiến trình chèn · Fig. 8',
     chart(
       labels,
       series((b) => b.elapsedMs / 1000),
@@ -1302,7 +1303,7 @@ function insertionCharts(c) {
         kind: 'line',
         unit: 's',
         xLabel: 'Tiến trình chèn (%)',
-        yLabel: 'Thời gian mỗi batch (s)',
+        yLabel: 'Thời gian thực thi mỗi batch (s)',
         formula:
           'Runtime(batch) = elapsedMs(batch) / 1.000. Tiến trình chèn (%) = N tích lũy / N toàn bộ × 100. Mỗi điểm lấy từ cùng một lượt chạy.',
         explanation:
@@ -1310,15 +1311,15 @@ function insertionCharts(c) {
       },
     ),
   )}${card(
-    'Bộ nhớ theo tiến trình chèn',
-    'JVM heap quan sát tích lũy',
+    'Bộ nhớ sử dụng',
+    'Theo tiến trình chèn · Fig. 9 · heap JVM',
     chart(
       labels,
       series((b) => b.peakMemoryMb * 1.048576),
       {
         unit: 'MB',
         xLabel: 'Tiến trình chèn (%)',
-        yLabel: 'JVM heap lấy mẫu (MB)',
+        yLabel: 'Bộ nhớ sử dụng (MB)',
         formula:
           'Heap (MB) = heap (MiB) × 1,048576. Đỉnh tích lũy = max các mẫu heap đến batch hiện tại. Tiến trình chèn (%) = N tích lũy / N toàn bộ × 100.',
         explanation:
@@ -1341,7 +1342,7 @@ function experimentHistoryCharts(c) {
   );
   const modes = [
     [
-      'Theo ngưỡng trên',
+      'Ngưỡng trên',
       'Sᵤ (%)',
       runs
         .filter(
@@ -1353,7 +1354,7 @@ function experimentHistoryCharts(c) {
       (x) => num(x.report.upperThreshold * 100, 4) + '%',
     ],
     [
-      'Theo kích thước dữ liệu',
+      'Kích thước dữ liệu',
       'Số giao dịch',
       runs
         .filter(
@@ -1365,7 +1366,7 @@ function experimentHistoryCharts(c) {
       (x) => num(x.report.transactionCount, 0),
     ],
     [
-      'Độ nhạy hai ngưỡng',
+      'Độ nhạy ngưỡng',
       'Sᵤ / Sₗ (%)',
       runs
         .filter(
@@ -1386,43 +1387,43 @@ function experimentHistoryCharts(c) {
       'Tiến trình chèn',
       insertionCharts(c) +
         table(
-          ['Batch', 'Đã chèn (%)', 'Giao dịch', 'Runtime (s)', 'Heap (MB)', 'Xử lý'],
+          ['Batch', 'Đã chèn (%)', 'Giao dịch', 'Thời gian thực thi (s)', 'Bộ nhớ (MB)', 'Xử lý'],
           c.report.batches.map((b) =>
             tr([
               esc(b.name),
               num((100 * b.cumulativeTransactionCount) / c.report.transactionCount),
               num(b.cumulativeTransactionCount, 0),
-              num(b.elapsedMs / 1000, 3),
+              runtimeSeconds(b.elapsedMs),
               num(b.peakMemoryMb * 1.048576),
               action(b),
             ]),
           ),
-          'Bảng · Hiệu năng từng batch',
+          'Hiệu năng theo tiến trình chèn',
         ),
     ],
     ...modes.map(([title, axis, points, label]) => [
       title,
       points.length < 2
         ? `<div class="experiment-empty"><h3>Chưa đủ lượt so sánh</h3><p>Cần ít nhất 2 lượt cùng nguồn và cấu hình tương ứng.</p><p class="subtle">${axis === 'Sᵤ (%)' ? 'Giữ Sₗ và kích thước dữ liệu, thay Sᵤ.' : axis === 'Số giao dịch' ? 'Giữ hai ngưỡng, chạy các kích thước dữ liệu khác nhau.' : 'Giữ kích thước dữ liệu và khoảng cách Sᵤ − Sₗ; giảm đều hai ngưỡng.'}</p></div>`
-        : `<div class="two-col equal-col">${card('Thời gian chạy', 'Runtime · s', chart(points.map(label), [{ name: 'PIHAUPA · Tight', color: colors.blue, values: points.map((x) => x.report.elapsedMs / 1000) }], { kind: 'line', unit: 's', xLabel: axis, yLabel: 'Thời gian (s)' }))}${card('Bộ nhớ sử dụng', 'JVM heap lấy mẫu · MB', chart(points.map(label), [{ name: 'Heap', color: colors.blue, values: points.map((x) => x.measurement.heapPeakObservedMb * 1.048576) }], { unit: 'MB', xLabel: axis, yLabel: 'Bộ nhớ (MB)' }))}</div>` +
+        : `<div class="two-col equal-col">${card('Thời gian thực thi', '', chart(points.map(label), [{ name: 'PIHAUPA · Tight', color: colors.blue, values: points.map((x) => x.report.elapsedMs / 1000) }], { kind: 'line', unit: 's', xLabel: axis, yLabel: 'Thời gian thực thi (s)' }))}${card('Bộ nhớ sử dụng', 'Heap JVM quan sát', chart(points.map(label), [{ name: 'PIHAUPA', color: colors.blue, values: points.map((x) => x.measurement.heapPeakObservedMb * 1.048576) }], { unit: 'MB', xLabel: axis, yLabel: 'Bộ nhớ sử dụng (MB)' }))}</div>` +
           table(
-            [axis, 'Giao dịch', 'Runtime (s)', 'Heap (MB)', 'Re-scan', 'HAUP'],
+            [axis, 'Giao dịch', 'Thời gian thực thi (s)', 'Bộ nhớ (MB)', 'Số re-scan', 'Số HAUP'],
             points.map((x) =>
               tr([
                 esc(label(x)),
                 num(x.report.transactionCount, 0),
-                num(x.report.elapsedMs / 1000, 3),
+                runtimeSeconds(x.report.elapsedMs),
                 num(x.measurement.heapPeakObservedMb * 1.048576),
                 num(x.report.stats.rescanCount, 0),
                 num(patternCount(last(x.report), 'LARGE'), 0),
               ]),
             ),
-            'Bảng · ' + title,
+            '' + title,
           ),
     ]),
   ];
   // Radio native: chọn bằng bàn phím; chỉ một nhóm biểu đồ hiện tại một thời điểm.
-  return `<section class="experiment-workspace"><ol class="comparison-flow" aria-label="Quy trình đối chiếu"><li><strong>1. Cùng đầu vào</strong><span>Tệp · ngưỡng · OR</span></li><li><strong>2. Đo thực tế</strong><span>Runtime · heap · re-scan</span></li><li><strong>3. Đối chiếu</strong><span>Tập HAUP và AU</span></li></ol><div class="analysis-heading"><div><h2>So sánh thực nghiệm</h2><p>Runtime (s) · Bộ nhớ (MB) · Re-scan. Chỉ vẽ số đo đã chạy.</p></div></div><div class="experiment-tabs">${panels.map(([title, body], i) => `<input class="experiment-radio" type="radio" name="performance-view" id="performance-view-${i}" ${i === 0 ? 'checked' : ''}><label class="experiment-tab" for="performance-view-${i}">${title}</label><div class="experiment-panel">${body}</div>`).join('')}</div><details class="measurement-method"><summary>Phương pháp đo & căn cứ</summary><p>Fig. 8–9: tiến trình chèn; Fig. 10–11: ngưỡng trên; Fig. 12: số giao dịch; Fig. 13–14: độ nhạy hai ngưỡng. Dữ liệu thực: OR + 9 lần chèn. Fig. 12 dùng dữ liệu tổng hợp, OR 91% + 19 lần chèn; dãy kích thước tệp hiện tại chỉ là khảo sát bổ sung.</p><p>Runtime không gồm đọc tệp. Heap lấy mẫu của Java khác phép đo bộ nhớ C++ trong bài báo. Chỉ dùng các lượt cùng nguồn, cấu hình chèn và số lần đo; không nội suy hoặc bổ sung số liệu thuật toán chưa chạy.</p></details></section>`;
+  return `<section class="experiment-workspace"><div class="analysis-heading"><div><h2>Kết quả thực nghiệm</h2></div></div><div class="experiment-tabs">${panels.map(([title, body], i) => `<input class="experiment-radio" type="radio" name="performance-view" id="performance-view-${i}" ${i === 0 ? 'checked' : ''}><label class="experiment-tab" for="performance-view-${i}">${title}</label><div class="experiment-panel">${body}</div>`).join('')}</div><details class="measurement-method"><summary>Phương pháp đo</summary><p>Fig. 8–9: tiến trình chèn; Fig. 10–11: ngưỡng trên; Fig. 12: số giao dịch; Fig. 13–14: độ nhạy hai ngưỡng. Dữ liệu thực: OR + 9 lần chèn. Fig. 12 dùng dữ liệu tổng hợp, OR 91% + 19 lần chèn; dãy kích thước tệp hiện tại chỉ là khảo sát bổ sung.</p><p>Runtime không gồm đọc tệp. Heap lấy mẫu của Java khác phép đo bộ nhớ C++ trong bài báo. Chỉ dùng các lượt cùng nguồn, cấu hình chèn và số lần đo; không nội suy hoặc bổ sung số liệu thuật toán chưa chạy.</p></details></section>`;
 }
 
 function renderMeasurements() {
@@ -1431,9 +1432,9 @@ function renderMeasurements() {
     m = c.measurement;
   $('content').innerHTML =
     reportNote() +
-    `<div class="kpi-grid">${kpi('Thời gian chạy', num(r.elapsedMs / 1000), m.repetitions > 1 ? 'Hồ sơ cũ · trung vị ' + m.repetitions + ' lượt' : '1 lượt · không gồm đọc tệp', 'clock', 's')}${kpi('Bộ nhớ sử dụng', num(m.heapPeakObservedMb * 1.048576), 'JVM heap · đỉnh lấy mẫu', 'measurements', 'MB')}${kpi('Số lần re-scan', num(r.stats.rescanCount, 0), 'Không tính quét ban đầu DB0', 'rescan')}${kpi('HAUP cuối', num(patternCount(last(r), 'LARGE'), 0), 'AU(P) ≥ Sᵤ × TU(DB)', 'patterns')}</div>` +
+    `<div class="kpi-grid">${kpi('Thời gian thực thi', runtimeSeconds(r.elapsedMs), m.repetitions > 1 ? 'Hồ sơ cũ · trung vị ' + m.repetitions + ' lượt' : 'Không gồm đọc tệp', 'clock', 's')}${kpi('Bộ nhớ sử dụng', num(m.heapPeakObservedMb * 1.048576), 'Đỉnh heap JVM quan sát', 'measurements', 'MB')}${kpi('Số lần re-scan', num(r.stats.rescanCount, 0), 'Không tính quét ban đầu DB0', 'rescan')}${kpi('Số HAUP', num(patternCount(last(r), 'LARGE'), 0), 'AU(P) ≥ Sᵤ × TU(DB)', 'patterns')}</div>` +
     experimentHistoryCharts(c) +
-    `<details class="device-panel"><summary>Thiết bị & số đo bổ sung</summary><div class="analysis-heading"><div><h2>Thiết bị & xử lý dữ liệu</h2><p>Số đo lấy mẫu; RAM toàn máy bao gồm ứng dụng khác.</p></div></div><dl class="device-numbers">${[
+    `<details class="device-panel"><summary>Tài nguyên hệ thống</summary><div class="analysis-heading"><div><p>Số đo bổ sung của ứng dụng; không thuộc thí nghiệm chính trong bài báo.</p></div></div><dl class="device-numbers">${[
       ['Đọc + SHA-256', m.importMs, 'ms'],
       ['CPU luồng', m.threadCpuMs, 'ms'],
       ['RAM tiến trình Java', m.resources?.processResidentMiBPeak, 'MiB'],
@@ -1448,14 +1449,14 @@ function renderMeasurements() {
       .join(
         '',
       )}</dl><details class="measurement-method"><summary>Cách tính đơn vị</summary><p>RAM (MiB) = bytes / 1.048.576. CPU (%) = CPU load do hệ điều hành cung cấp × 100; số hiển thị là đỉnh lấy mẫu. CPU luồng (ms) = CPU time (ns) / 10⁶. Thời gian đọc gồm đọc tệp và SHA-256.</p></details></details>` +
-    `<section class="card history"><div class="card-head"><h2>Lịch sử phép đo</h2></div>${table(
+    `<section class="card history"><div class="card-head"><h2>Các lượt thực nghiệm</h2></div>${table(
       [
         'Lượt',
         'Dữ liệu',
         'Sᵤ / Sₗ (%)',
         'Giao dịch',
-        'Thời gian (s)',
-        'Heap (MB)',
+        'Thời gian thực thi (s)',
+        'Bộ nhớ (MB)',
         'Re-scan',
         'HAUP',
       ],
@@ -1465,14 +1466,14 @@ function renderMeasurements() {
           esc(x.source),
           num(x.report.upperThreshold * 100, 4) + ' / ' + num(x.report.lowerThreshold * 100, 4),
           num(x.report.transactionCount, 0),
-          num(x.report.elapsedMs / 1000, 3),
+          runtimeSeconds(x.report.elapsedMs),
           num(x.measurement.heapPeakObservedMb * 1.048576),
           num(x.report.stats.rescanCount, 0),
           num(patternCount(last(x.report), 'LARGE'), 0),
         ]),
       ),
     )}</section>` +
-    `<details class="report-detail"><summary>Thiết bị & số đo chi tiết</summary>${renderResourceMeasurements(c)}${renderSizeMeasurements()}${manifestPanel(c)}${c.comparison ? renderComparison(c.comparison) : ''}</details>`;
+    `<details class="report-detail"><summary>Dữ liệu đo chi tiết</summary>${renderResourceMeasurements(c)}${renderSizeMeasurements()}${manifestPanel(c)}${c.comparison ? renderComparison(c.comparison) : ''}</details>`;
   $('export-sizes').onclick = () => {
     const runs = state.history.filter(
       (run) =>
@@ -1539,23 +1540,30 @@ function renderComparison(pair) {
   return (
     notice(
       pair.sameHaups
-        ? '<strong>KHỚP:</strong> tập HAUP cuối và AU giống nhau.'
+        ? '<strong>Kết quả trùng khớp:</strong> cùng tập HAUP và AU(P).'
         : '<strong>LỆCH:</strong> tập HAUP hoặc AU khác nhau.',
     ) +
     `<p class="subtle">Hai chính sách re-scan của cùng lõi Java; không phải bản cài đặt PRE-HAUIMI hay các thuật toán so sánh khác trong bài báo.${pair.repetitions > 1 ? ' Hồ sơ cũ: runtime là trung vị nhiều lượt.' : ' Mỗi chính sách đo một lượt.'}</p>` +
     table(
-      ['Chính sách', 'Runtime (s)', 'Heap (MB)', 'Re-scan', 'HAUP cuối', 'Môi trường'],
+      [
+        'Chính sách',
+        'Thời gian thực thi (s)',
+        'Bộ nhớ (MB)',
+        'Số re-scan',
+        'Số HAUP',
+        'Môi trường',
+      ],
       reports.map((r, i) =>
         tr([
           i ? 'Tight' : 'Original',
-          num(r.elapsedMs / 1000, 3),
+          runtimeSeconds(r.elapsedMs),
           num(r.peakMemoryMb * 1.048576),
           num(r.stats.rescanCount, 0),
           num(patternCount(last(r), 'LARGE'), 0),
           pair.isolated ? 'JVM riêng' : 'JVM chung',
         ]),
       ),
-      'Bảng · Đối chiếu chính sách re-scan',
+      'Đối chiếu hai chính sách re-scan',
     )
   );
 }
@@ -1613,21 +1621,21 @@ async function renderVerification() {
   const v = state.verification;
   $('content').innerHTML =
     notice(
-      `<strong>${v.passed ? 'ĐẠT' : 'KHÔNG ĐẠT'} · ${v.checks.filter((c) => c.passed).length}/${v.checks.length} đối chiếu.</strong> Giá trị kỳ vọng được cố định từ ví dụ bài báo, không lấy từ dữ liệu đang hiển thị. Test tự động còn so với vét cạn trên các luồng nhỏ ngẫu nhiên.`,
+      `<strong>${v.passed ? 'ĐẠT' : 'KHÔNG ĐẠT'} · ${v.checks.filter((c) => c.passed).length}/${v.checks.length} đối chiếu.</strong> Tham chiếu: dữ liệu và ví dụ trong bài báo.`,
     ) +
-    `<div class="kpi-grid">${kpi('Giao dịch mẫu', '9', 'Tables 2–3 · 6 item', 'datasets')}${kpi('TU(DB0 → DB2)', '240', '141 → 173 → 240 utility', 'measurements')}${kpi('Tight / Original', '1 / 2', 'Số re-scan, không gồm DB0', 'rescan')}${kpi('HAUP cuối', '3', '{E}, {B}, {B,E}', 'verification')}</div>` +
-    `<details class="report-detail"><summary>Biểu đồ ví dụ</summary><div class="two-col equal-col">${card('Utility kỳ vọng từ bài báo', 'Dữ liệu gốc Tables 2–3', chart(['DB0', 'DB0+DB1', 'DB0+DB1+DB2'], [{ name: 'TU tích lũy', values: [141, 173, 240], color: colors.blue }], { unit: 'utility' }))}${card('AU của HAUP cuối', 'Giá trị kiểm chứng ở Sᵤ = 0,23', chart(['{E}', '{B}', '{B,E}'], [{ name: 'AU(P)', values: [84, 75, 63.5], color: colors.green }], { unit: 'utility' }))}</div></details>` +
+    `<div class="kpi-grid">${kpi('Giao dịch mẫu', '9', 'Tables 2–3 · 6 item', 'datasets')}${kpi('Tổng tiện ích TU(DB)', '240', '141 → 173 → 240 utility', 'measurements')}${kpi('Số lần re-scan', '1 / 2', 'Tight / Original · không gồm DB0', 'rescan')}${kpi('Số HAUP', '3', '{E}, {B}, {B,E}', 'verification')}</div>` +
+    `<details class="report-detail"><summary>Biểu đồ đối chiếu</summary><div class="two-col equal-col">${card('Utility kỳ vọng từ bài báo', 'Dữ liệu gốc Tables 2–3', chart(['DB0', 'DB0+DB1', 'DB0+DB1+DB2'], [{ name: 'TU tích lũy', values: [141, 173, 240], color: colors.blue }], { unit: 'utility' }))}${card('AU của HAUP cuối', 'Giá trị kiểm chứng ở Sᵤ = 0,23', chart(['{E}', '{B}', '{B,E}'], [{ name: 'AU(P)', values: [84, 75, 63.5], color: colors.green }], { unit: 'utility' }))}</div></details>` +
     `<ol class="comparison-flow" aria-label="Quy trình kiểm chứng"><li><strong>1. Tables 2–3</strong><span>9 giao dịch · Sᵤ 23% · Sₗ 10%</span></li><li><strong>2. Chạy Java</strong><span>DB0 → DB1 → DB2</span></li><li><strong>3. Kiểm tra</strong><span>AU · HAUP · re-scan</span></li></ol><section class="card">${table(
-      ['Chỉ tiêu', 'Tham chiếu¹', 'Java thực tính', 'Đối chiếu'],
+      ['Chỉ tiêu', 'Tham chiếu¹', 'Kết quả thực thi', 'Đối chiếu'],
       v.checks.map((c) =>
         tr([
           esc(c.label),
           verificationValue(c.expected),
           verificationValue(c.actual),
-          `<span class="${c.passed ? 'success-text' : 'fail-text'}">${c.passed ? 'ĐẠT' : 'KHÔNG ĐẠT'}</span>`,
+          `<span class="${c.passed ? 'success-text' : 'fail-text'}">${c.passed ? 'KHỚP' : 'LỆCH'}</span>`,
         ]),
       ),
-      'Bảng · Kiểm chứng ví dụ PIHAUPA',
+      'Đối chiếu ví dụ trong bài báo',
     )}</section><p class="source-note">¹ DB1: Table 5; DB2: tính từ Tables 2–3, không phải bảng DB2 in sẵn. Nguồn: <a href="https://doi.org/10.1186/s40537-025-01352-x" target="_blank" rel="noreferrer">Intelligent average utility pattern analysis using pre-large concept in dynamic stream data</a> · Tables 2–3, ví dụ khai phá và Eq. (5), (6), (12). Kiểm chứng mẫu không đồng nghĩa chứng minh mọi đầu vào.</p>`;
 }
 function renderGlossary() {
@@ -1749,7 +1757,7 @@ async function renderTestCases() {
       ? table(
           [
             'Testcase',
-            'Runtime (ms)',
+            'Thời gian thực thi (ms)',
             'Heap trước (MiB)',
             'Heap sau (MiB)',
             'RAM toàn máy sau (MiB)',
@@ -1763,7 +1771,7 @@ async function renderTestCases() {
               num(c.memoryAfter.systemUsedMiB),
             ]),
           ),
-          'Bảng · Tài nguyên từng testcase — JVM chung',
+          'Tài nguyên từng testcase — JVM chung',
         )
       : '') +
     `<div class="section-row"><p class="subtle">Xuất trạng thái hiện tại, không tự chạy lại kiểm thử.</p><button id="export-tests" class="button">Xuất kiểm thử ZIP</button></div>` +
@@ -1869,7 +1877,7 @@ async function renderRuns() {
       '20 hồ sơ gần nhất · không mất khi tải lại trang',
       runs.length
         ? table(
-            ['Thời điểm', 'Dữ liệu', 'Sᵤ / Sₗ', 'Giao dịch', 'HAUP', 'Runtime (ms)', ''],
+            ['Thời điểm', 'Dữ liệu', 'Sᵤ / Sₗ', 'Giao dịch', 'HAUP', 'Thời gian thực thi (ms)', ''],
             runs.map((r) =>
               tr([
                 esc(new Date(r.createdAt).toLocaleString('vi-VN')),
@@ -1882,7 +1890,7 @@ async function renderRuns() {
                 `<button class="button open-run" data-id="${esc(r.id)}">Mở kết quả</button>`,
               ]),
             ),
-            'Bảng · Hồ sơ thực nghiệm',
+            'Hồ sơ thực nghiệm',
           )
         : '<p class="subtle">Chưa có hồ sơ. Lượt hoàn tất sẽ được lưu trong results/runs.</p>',
     );

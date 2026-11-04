@@ -129,7 +129,7 @@ for (const file of [
   if (!content.includes('final-numbers')) throw Error('Missing final numeric summary');
   if (!content.includes('Oracle độc lập')) throw Error('Missing verification level');
   vm.runInContext('renderMeasurements()', ctx);
-  if (!el('content').innerHTML.includes('Thời gian chạy')) throw Error('Missing runtime');
+  if (!el('content').innerHTML.includes('Thời gian thực thi')) throw Error('Missing runtime');
   if (ctx.result.measurement.resources && !el('content').innerHTML.includes('RAM tiến trình Java'))
     throw Error('Missing RAM KPI cards');
   console.log('PASS module render:', ctx.result.source);
@@ -188,7 +188,7 @@ if (fs.existsSync('tmp/resource-result.json')) {
   const sizes = vm.runInContext('renderSizeMeasurements()', ctx);
   if (ram.includes('chart-widget') || sizes.includes('chart-widget'))
     throw Error('Resource/size statistics must be numeric only');
-  if (!ram.includes('Runtime (ms)') || !ram.includes('RAM Java (MiB)'))
+  if (!ram.includes('Thời gian thực thi (ms)') || !ram.includes('RAM Java (MiB)'))
     throw Error('Missing numeric metrics');
   console.log('PASS numeric RAM/runtime tables without charts');
 }
@@ -332,3 +332,9 @@ vm.runInContext(
   ctx,
 );
 console.log('PASS single-run UI, historic provenance and fixed-gap sensitivity comparison');
+
+vm.runInContext(
+  `if (runtimeSeconds(.2) !== '0,0002' || runtimeSeconds(2) !== '0,002') throw Error('Runtime must not round a short measured run to zero');`,
+  ctx,
+);
+console.log('PASS short runtime retains measured precision');

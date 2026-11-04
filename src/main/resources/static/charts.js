@@ -213,13 +213,13 @@ export function chart(
   svg += '</svg>';
 
   svg += `
-    <div class="legend">
+    <div class="legend" ${series.length === 1 ? 'hidden' : ''}>
       ${series
         .map(
           (s, i) => `
             <span>
               <i style="background:${s.color || Object.values(colors)[i % 5]}"></i>
-              ${esc(s.name)}${unit ? ' · ' + esc(unit) : ''}
+              ${esc(s.name)}
             </span>
           `,
         )
@@ -233,7 +233,7 @@ export function chart(
       <div class="table-wrap">
         <table class="data-table">
           <caption>
-            Bảng số liệu · ${esc(series.map((s) => s.name).join(' / '))}
+            Số liệu · ${esc(series.map((s) => s.name).join(' / '))}
           </caption>
           <thead>
             <tr>
@@ -333,7 +333,7 @@ export function chart(
 
   const evidence = `
     <details class="chart-explanation">
-      <summary>Căn cứ & phép tính</summary>
+      <summary>Công thức & số liệu</summary>
       <p class="chart-formula">${esc(formula)}</p>
       <p>${esc(explanation)}</p>
       ${
@@ -418,7 +418,17 @@ function compact(value) {
   if (Math.abs(value) >= 1e6) return num(value / 1e6, 1) + 'M';
   if (Math.abs(value) >= 1e3) return num(value / 1e3, 1) + 'k';
 
-  return num(value, 1);
+  const magnitude = Math.abs(value);
+  // Giữ các vạch trục khác nhau khi runtime ngắn hơn một giây.
+  if (magnitude > 0 && magnitude < 1e-7)
+    return new Intl.NumberFormat('vi-VN', {
+      notation: 'scientific',
+      maximumFractionDigits: 1,
+    }).format(value);
+  return num(
+    value,
+    magnitude > 0 && magnitude < 1 ? Math.min(8, Math.ceil(-Math.log10(magnitude)) + 1) : 1,
+  );
 }
 
 // One delegated handler supports charts added by every page and subsequent runs.
