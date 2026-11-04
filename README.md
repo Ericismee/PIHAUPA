@@ -1,3 +1,5 @@
+> **Cập nhật giao diện 04/11/2026:** Web chạy **một lượt** cho mỗi cấu hình; bỏ bộ chọn lặp/warm-up. Bài báo không nêu median là phương pháp tổng hợp runtime. Hồ sơ cũ nhiều lượt vẫn giữ dữ liệu và được gắn nhãn “trung vị (hồ sơ cũ)”. Các benchmark tối ưu ở các phần sau là phép đo phát triển riêng, không phải quy trình thực nghiệm do tác giả quy định. Xem [đối chiếu chỉ số](docs/PAPER-UI-METRICS.md).
+
 # PIHAUPA Research Lab
 
 Ứng dụng Web Java để khai phá **mẫu tiện ích trung bình cao (HAUP)** trên dữ liệu tăng dần, kiểm chứng ví dụ bài báo và quan sát chi phí thực thi. Giao diện nền sáng trình bày cấu hình, kết quả, từng batch, quyết định re-scan và biểu đồ trong cùng một luồng phân tích.

@@ -29,30 +29,27 @@
           ‹
         </button>
       </div>
-      <div class="workspace">
-        <div>Nhóm 3 · Java nâng cao</div>
-      </div>
-      <p class="nav-label">PHÂN TÍCH</p>
+      <p class="nav-label">KHAI PHÁ</p>
       <nav aria-label="Điều hướng chính">
         <a href="#overview" data-page="overview"
-          ><span data-icon="overview"></span>Phân tích PIHAUPA</a
+          ><span data-icon="overview"></span>Phân tích & kết quả</a
         >
-      </nav>
-      <p class="nav-label">THỰC NGHIỆM</p>
-      <nav aria-label="Thực nghiệm và tài liệu">
         <a href="#measurements" data-page="measurements"
           ><span data-icon="measurements"></span>Hiệu năng</a
         >
-        <a href="#datasets" data-page="datasets"><span data-icon="datasets"></span>Bộ dữ liệu</a>
-        <a href="#runs" data-page="runs"><span data-icon="clock"></span>Hồ sơ thực nghiệm</a>
-        <a href="#testcases" data-page="testcases"
-          ><span data-icon="verification"></span>Test case & kiểm thử</a
-        >
         <a href="#verification" data-page="verification"
-          ><span data-icon="verification"></span>Kiểm chứng bài báo</a
+          ><span data-icon="verification"></span>Đối chiếu bài báo</a
         >
+      </nav>
+      <p class="nav-label">DỮ LIỆU & TÀI LIỆU</p>
+      <nav aria-label="Dữ liệu và tài liệu">
+        <a href="#datasets" data-page="datasets"><span data-icon="datasets"></span>Bộ dữ liệu</a>
+        <a href="#runs" data-page="runs"><span data-icon="clock"></span>Lượt chạy đã lưu</a>
         <a href="#glossary" data-page="glossary"
           ><span data-icon="glossary"></span>Công thức & thuật ngữ</a
+        >
+        <a href="#testcases" data-page="testcases"
+          ><span data-icon="verification"></span>Kiểm thử phần mềm</a
         >
       </nav>
       <div class="sidebar-note">
@@ -73,7 +70,7 @@
       <header class="topbar">
         <div class="topbar-navigation">
           <div>
-            <span class="breadcrumb">Nhóm 3 · Java nâng cao</span><span class="crumb-sep">/</span
+            <span class="breadcrumb">PIHAUPA Research Lab</span><span class="crumb-sep">/</span
             ><strong id="breadcrumb">Phân tích PIHAUPA</strong>
           </div>
         </div>
@@ -107,7 +104,7 @@
       <main id="main" tabindex="-1">
         <div class="page-heading">
           <div>
-            <div class="eyebrow">INCREMENTAL PATTERN MINING</div>
+            <div class="eyebrow">KHAI PHÁ DỮ LIỆU TĂNG DẦN</div>
             <h1 id="page-title">Phân tích PIHAUPA</h1>
             <p id="page-description">Từ dữ liệu giao dịch đến mẫu tiện ích trung bình cao.</p>
           </div>
@@ -190,13 +187,7 @@
               <summary>Cấu hình thực nghiệm</summary>
               <div class="options-body">
                 <div class="config-grid">
-                  <label class="config-field" for="repeats"
-                    >Số lượt đo<select id="repeats">
-                      <option value="1">1 lượt</option>
-                      <option value="3" selected>3 lượt + 1 warm-up · Khuyến nghị</option>
-                      <option value="5">5 lượt + 1 warm-up</option>
-                    </select></label
-                  >
+                  <input type="hidden" id="repeats" value="1" />
                   <label class="config-field" for="size-percent"
                     >Dữ liệu sử dụng<select id="size-percent">
                       <option value="20">20%</option>

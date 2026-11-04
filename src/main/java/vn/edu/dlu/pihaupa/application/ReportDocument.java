@@ -231,7 +231,7 @@ public final class ReportDocument {
 
     section(out, "05", "Thời gian và bộ nhớ");
     out.append(
-      "<p>Runtime dưới đây thuộc lượt đại diện; median nhiều lượt và tổng CPU có phạm vi khác nhau.</p>"
+      "<p>Runtime tính bằng giây; heap là đỉnh JVM lấy mẫu. Hồ sơ nhiều lượt cũ được ghi riêng.</p>"
     );
     tableStart(
       out,
@@ -267,17 +267,21 @@ public final class ReportDocument {
     );
     metric(
       out,
-      "Khai phá · median",
+      ((Number) job.manifest.getOrDefault("measuredRuns", 1)).intValue() > 1
+        ? "Khai phá · trung vị (hồ sơ cũ)"
+        : "Khai phá · một lượt",
       job.measurements.getOrDefault("medianMs", r.elapsedNanos() / 1e6),
       "ms",
-      "Một lượt đại diện của các lượt đo, không gồm warm-up"
+      ((Number) job.manifest.getOrDefault("measuredRuns", 1)).intValue() > 1
+        ? "Trung vị các lượt đo cũ, không gồm warm-up"
+        : "Runtime một lượt, không gồm đọc tệp"
     );
     metric(
       out,
       "Khai phá · tổng",
       job.measurements.get("algorithmTotalMs"),
       "ms",
-      "Tổng vùng khai phá, gồm warm-up và các lượt đo; không phải median một lượt"
+      "Tổng vùng khai phá; có thể gồm warm-up trong hồ sơ cũ"
     );
     metric(
       out,

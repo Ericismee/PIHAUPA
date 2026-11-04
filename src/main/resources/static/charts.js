@@ -83,7 +83,7 @@ export function chart(
     <p class="chart-axes">
       <span><strong>X:</strong> ${esc(xLabel)}</span>
       <span>
-        <strong>Y:</strong> ${esc(yLabel)}${unit ? ' (' + esc(unit) + ')' : ''}
+        <strong>Y:</strong> ${esc(yLabel)}${unit && !yLabel.includes('(' + unit + ')') ? ' (' + esc(unit) + ')' : ''}
       </span>
     </p>
   `;
@@ -93,7 +93,7 @@ export function chart(
   const longestLabel = Math.max(...labels.map((label) => String(label).length));
   const labelChars = Math.min(longestLabel, expanded ? 32 : 20);
   const slotWidth = Math.max(70, labelChars * 8 + 24);
-  const width = Math.max(expanded ? 900 : 600, labels.length * slotWidth + 83);
+  const width = Math.max(expanded ? 900 : 360, labels.length * slotWidth + 83);
   const left = 65;
   const right = 18;
   const top = 22;
@@ -228,7 +228,7 @@ export function chart(
   `;
 
   svg += `
-    <details class="source-note chart-data" open>
+    <details class="source-note chart-data" ${expanded ? 'open' : ''}>
       <summary>Bảng số liệu</summary>
       <div class="table-wrap">
         <table class="data-table">
@@ -313,7 +313,7 @@ export function chart(
           : names.includes('Sᵤ') || names.includes('Sₗ')
             ? 'Ngưỡng trên = Sᵤ × TU(DB); ngưỡng dưới = Sₗ × TU(DB).'
             : unit === 's'
-              ? 'Runtime (s) = thời gian kết thúc − thời gian bắt đầu, tính bằng ns / 10⁹. Khi đo lặp: dùng median các lượt, không gồm warm-up.'
+              ? 'Runtime (s) = thời gian kết thúc − thời gian bắt đầu, tính bằng ns / 10⁹. Không gồm thời gian đọc tệp.'
               : unit === 'MB'
                 ? 'Heap (MB) = số byte heap đã dùng / 1.000.000; đỉnh quan sát = max các mẫu đã lấy.'
                 : unit === 'MiB'
@@ -332,14 +332,14 @@ export function chart(
   const i = labels.length - 1;
 
   const evidence = `
-    <div class="chart-explanation">
-      <strong>Công thức áp dụng</strong>
+    <details class="chart-explanation">
+      <summary>Căn cứ & phép tính</summary>
       <p class="chart-formula">${esc(formula)}</p>
       <p>${esc(explanation)}</p>
       ${
         evidenceRows.length
           ? `
-            <details class="chart-workings" open><summary>Thay số & kết quả</summary><ol class="evidence-steps">
+            <details class="chart-workings"><summary>Thay số & kết quả</summary><ol class="evidence-steps">
               ${evidenceRows
                 .map(
                   (row) => `
@@ -361,7 +361,7 @@ export function chart(
             </p>
           `
       }
-    </div>
+    </details>
   `;
 
   const payload = esc(

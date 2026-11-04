@@ -129,7 +129,7 @@ for (const file of [
   if (!content.includes('final-numbers')) throw Error('Missing final numeric summary');
   if (!content.includes('Oracle độc lập')) throw Error('Missing verification level');
   vm.runInContext('renderMeasurements()', ctx);
-  if (!el('content').innerHTML.includes('median')) throw Error('Missing repeated measurement');
+  if (!el('content').innerHTML.includes('Thời gian chạy')) throw Error('Missing runtime');
   if (ctx.result.measurement.resources && !el('content').innerHTML.includes('RAM tiến trình Java'))
     throw Error('Missing RAM KPI cards');
   console.log('PASS module render:', ctx.result.source);
@@ -303,3 +303,32 @@ if (fs.existsSync('results/runs/6c546d47-2a7c-449e-83fc-fd9d8c08802e/result.json
   );
   console.log('PASS recovered bulk report: exact full counts and paged table');
 }
+// Scientific presentation regressions: one new run, preserve historic provenance,
+// and do not mix unequal threshold gaps in the sensitivity experiment.
+const pageSource = fs.readFileSync('src/main/resources/static/index.html', 'utf8');
+if (!pageSource.includes('type="hidden" id="repeats" value="1"'))
+  throw Error('New web runs must use one measurement');
+if (pageSource.includes('3 lượt + 1 warm-up')) throw Error('Repeat selector is still exposed');
+vm.runInContext(
+  `
+{
+  const savedCurrent = state.current, savedHistory = state.history;
+  const base = JSON.parse(JSON.stringify(state.current));
+  base.measurement.repetitions = 1;
+  base.report.upperThreshold = .23; base.report.lowerThreshold = .1;
+  const good = JSON.parse(JSON.stringify(base)), bad = JSON.parse(JSON.stringify(base));
+  good.report.upperThreshold = .21; good.report.lowerThreshold = .08;
+  bad.report.upperThreshold = .22; bad.report.lowerThreshold = .08;
+  state.history = [base,good,bad];
+  const sensitivity = experimentHistoryCharts(base).split('id="performance-view-3"')[1];
+  if (!sensitivity.includes('21 / 8') || sensitivity.includes('22 / 8')) throw Error('Sensitivity must hold the threshold gap constant');
+  base.measurement.repetitions = 3; state.current = base;
+  if (!reportNote().includes('trung vị 3 lượt')) throw Error('Historic median provenance missing');
+  base.measurement.repetitions = 1;
+  if (reportNote().includes('trung vị')) throw Error('Single-run report mislabeled as median');
+  state.current = savedCurrent; state.history = savedHistory;
+}
+`,
+  ctx,
+);
+console.log('PASS single-run UI, historic provenance and fixed-gap sensitivity comparison');

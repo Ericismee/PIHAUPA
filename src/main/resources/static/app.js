@@ -52,7 +52,7 @@ document.querySelectorAll('#sidebar nav a').forEach((link) => {
   }
 });
 const pages = {
-  overview: ['Phân tích PIHAUPA', 'Theo dõi tính toán theo batch và xem kết luận ở cuối báo cáo.'],
+  overview: ['Phân tích & kết quả', 'Cấu hình → xử lý từng batch → tập HAUP cuối.'],
   batches: ['Phân tích từng bước', 'Theo dõi utility, ngưỡng phân loại và tập mẫu qua mỗi batch.'],
   rescan: [
     'Quyết định re-scan',
@@ -65,13 +65,10 @@ const pages = {
     'Đọc trực tiếp transactions.txt; mỗi bộ dữ liệu được phân tích độc lập.',
   ],
   testcases: [
-    'Test case & kiểm thử',
+    'Kiểm thử phần mềm',
     'Chạy test thật, xem đầu vào, kết quả kỳ vọng và lỗi của từng case.',
   ],
-  verification: [
-    'Kiểm chứng bài báo gốc',
-    'Đối chiếu dữ liệu Tables 2–3, tập HAUP và hành vi re-scan.',
-  ],
+  verification: ['Đối chiếu bài báo', 'Đối chiếu dữ liệu Tables 2–3, tập HAUP và hành vi re-scan.'],
   runs: [
     'Hồ sơ thực nghiệm',
     'Các lượt hoàn tất đã lưu trên máy; mở lại cấu hình, kết quả và số đo.',
@@ -355,16 +352,16 @@ function applyThresholdMode() {
     mode === 'custom'
       ? 'Nhập tỷ lệ: 0,01 = 1%. Giữ nguyên ngưỡng bạn chọn; không tự tăng để chạy nhanh.'
       : mode === 'quick'
-        ? 'Đo nhanh: Sᵤ = 99% r, Sₗ = 98% r; r = max AU(item đơn) / TU(DB). Ngưỡng cao có thể chỉ còn 1 HAUP. Dùng kiểm tra quy trình và số đo; không cam kết thời gian, không phải benchmark bài báo.'
+        ? 'Sᵤ = 99% r, Sₗ = 98% r. Chạy khảo sát nhanh, có thể ít HAUP; không phải ngưỡng bài báo.'
         : mode === 'balanced'
-          ? 'Cân bằng: Sᵤ = 95% r, Sₗ = 90% r. Đã đo toàn bộ 6 tệp đi kèm ở cấu hình 1 lượt, 80/10/10; số mẫu có thể ít. Thời gian phụ thuộc máy và cấu hình; không phải benchmark bài báo.'
+          ? 'Sᵤ = 95% r, Sₗ = 90% r. Khảo sát bổ sung; thời gian tùy dữ liệu và máy.'
           : mode === 'survey'
-            ? `Khảo sát: Sᵤ = ${num(survey[0] * 100, 0)}% r, Sₗ = ${num(survey[1] * 100, 0)}% r; r = max AU(item đơn) / TU(DB). Chọn riêng từng tệp để có nhiều mẫu hơn. Thời gian phụ thuộc máy và cấu hình; ngân sách 15–20 phút không phải hạn giờ tự động.`
+            ? `Khảo sát: Sᵤ = ${num(survey[0] * 100, 0)}% r, Sₗ = ${num(survey[1] * 100, 0)}% r; r = max AU(item đơn) / TU(DB). Khảo sát bổ sung, không phải ngưỡng bài báo.`
             : mode === 'reference'
               ? paper
                 ? 'Ngưỡng ví dụ bài báo: 23% / 10%.'
                 : 'Ngưỡng khởi đầu cũ, sát mẫu mạnh nhất; có thể ít HAUP.'
-              : 'Khảo sát sâu: 05 → 06 → 07. r = max AU(item đơn) / TU(DB). Hạ ngưỡng có thể tăng mạnh số PRE-LARGE, thời gian và RAM. Bắt đầu ở 02; chọn 01 hoặc 03 để chạy nhanh hơn. Đây không phải benchmark bài báo.';
+              : 'Hạ ngưỡng làm tăng số mẫu, thời gian và RAM. Đây là cấu hình khảo sát bổ sung.';
   thresholdLabels();
 }
 function markCustomThreshold() {
@@ -611,7 +608,7 @@ async function runAnalysis(event, retryBusy = true) {
     su,
     sl,
     compare: $('compare').checked,
-    repeats: $('repeats').value,
+    repeats: '1',
     sizePercent: $('size-percent').value || '100',
     insertions: $('insertion-steps').value,
     originalRatio: $('original-ratio').value,
@@ -663,7 +660,7 @@ async function runAnalysis(event, retryBusy = true) {
       sl,
       format: $('format').value,
       fileModified: file?.lastModified ?? 0,
-      repeats: Number($('repeats').value),
+      repeats: 1,
       sizePercent: Number($('size-percent').value || 100),
       insertions: Number($('insertion-steps').value),
       originalRatio: Number($('original-ratio').value),
@@ -832,12 +829,19 @@ function renderEmpty() {
           ? 'Chọn tệp TXT và kiểm tra ngưỡng trước khi chạy.'
           : 'Bộ dữ liệu lớn đã được chọn, ngưỡng khởi đầu đã sẵn sàng.';
   $('content').innerHTML =
-    `<section class="card empty"><span class="empty-icon">${icon('measurements')}</span><h2>Sẵn sàng cho lần phân tích đầu tiên</h2><p>${ready} Bấm <strong>Chạy phân tích</strong> để xem kết quả thực, công thức theo từng batch và các biểu đồ đo lường.</p><a class="button" href="#verification">${icon('verification')}Xem kiểm chứng bài báo</a><div class="empty-flow"><span>Chọn dữ liệu</span><span>→</span><span>Chạy lõi Java</span><span>→</span><span>Khám phá báo cáo</span></div></section>`;
+    `<section class="card empty"><span class="empty-icon">${icon('measurements')}</span><h2>Chạy phân tích để xem kết quả</h2><p>${ready} Bấm <strong>Chạy phân tích</strong> để xem HAUP, re-scan và hiệu năng.</p><a class="button" href="#verification">${icon('verification')}Xem kiểm chứng bài báo</a><div class="empty-flow"><span>Chọn dữ liệu</span><span>→</span><span>Chạy lõi Java</span><span>→</span><span>Khám phá báo cáo</span></div></section>`;
 }
 
 function reportNote() {
   const c = state.current;
   return (
+    ((c.measurement.repetitions || 1) > 1
+      ? notice(
+          'Hồ sơ cũ: runtime là trung vị ' +
+            c.measurement.repetitions +
+            ' lượt. Lượt chạy mới chỉ đo một lần.',
+        )
+      : '') +
     (c.bulk
       ? notice(
           'Báo cáo lớn: số đếm là toàn bộ kết quả. Biểu đồ dùng preview; bảng mẫu đọc phân trang từ đĩa. ZIP chứa toàn bộ mẫu, không cắt kết quả khai phá.',
@@ -1250,7 +1254,7 @@ function renderSizeMeasurements() {
         'Giao dịch',
         'Sᵤ / Sₗ',
         'Lượt đo',
-        'Runtime median (ms)',
+        'Runtime (ms)',
         'Đỉnh heap (MiB)',
         'RAM tiến trình (MiB)',
         'HAUP',
@@ -1300,7 +1304,7 @@ function insertionCharts(c) {
         xLabel: 'Tiến trình chèn (%)',
         yLabel: 'Thời gian mỗi batch (s)',
         formula:
-          'Runtime(batch) = elapsedMs(batch) / 1.000. Tiến trình chèn (%) = N tích lũy / N toàn bộ × 100. Runtime từng batch thuộc lượt đại diện, không phải median riêng từng batch.',
+          'Runtime(batch) = elapsedMs(batch) / 1.000. Tiến trình chèn (%) = N tích lũy / N toàn bộ × 100. Mỗi điểm lấy từ cùng một lượt chạy.',
         explanation:
           'Mỗi điểm là thời gian xử lý một batch, gồm khai phá và re-scan nếu có; không gồm đọc tệp. Điểm đầu là DB0.',
       },
@@ -1328,6 +1332,8 @@ function experimentHistoryCharts(c) {
   const runs = state.history.filter(
     (x) =>
       x.source === c.source &&
+      (x.measurement.repetitions || 1) === 1 &&
+      (c.measurement.repetitions || 1) === 1 &&
       x.manifest?.insertionSteps === c.manifest?.insertionSteps &&
       x.manifest?.originalRatio === c.manifest?.originalRatio &&
       x.measurement.repetitions === c.measurement.repetitions &&
@@ -1361,7 +1367,17 @@ function experimentHistoryCharts(c) {
     [
       'Độ nhạy hai ngưỡng',
       'Sᵤ / Sₗ (%)',
-      runs.filter((x) => x.report.transactionCount === c.report.transactionCount),
+      runs
+        .filter(
+          (x) =>
+            x.report.transactionCount === c.report.transactionCount &&
+            Math.abs(
+              x.report.upperThreshold -
+                x.report.lowerThreshold -
+                (c.report.upperThreshold - c.report.lowerThreshold),
+            ) < 1e-10,
+        )
+        .sort((a, b) => b.report.upperThreshold - a.report.upperThreshold),
       (x) => num(x.report.upperThreshold * 100, 4) + ' / ' + num(x.report.lowerThreshold * 100, 4),
     ],
   ];
@@ -1387,7 +1403,7 @@ function experimentHistoryCharts(c) {
     ...modes.map(([title, axis, points, label]) => [
       title,
       points.length < 2
-        ? `<div class="experiment-empty"><h3>Chưa đủ lượt so sánh</h3><p>Cần ít nhất 2 lượt cùng nguồn và cấu hình tương ứng.</p><p class="subtle">${axis === 'Sᵤ (%)' ? 'Giữ Sₗ và kích thước dữ liệu, thay Sᵤ.' : axis === 'Số giao dịch' ? 'Giữ hai ngưỡng, chạy các kích thước dữ liệu khác nhau.' : 'Giữ kích thước dữ liệu, thay cặp Sᵤ / Sₗ.'}</p></div>`
+        ? `<div class="experiment-empty"><h3>Chưa đủ lượt so sánh</h3><p>Cần ít nhất 2 lượt cùng nguồn và cấu hình tương ứng.</p><p class="subtle">${axis === 'Sᵤ (%)' ? 'Giữ Sₗ và kích thước dữ liệu, thay Sᵤ.' : axis === 'Số giao dịch' ? 'Giữ hai ngưỡng, chạy các kích thước dữ liệu khác nhau.' : 'Giữ kích thước dữ liệu và khoảng cách Sᵤ − Sₗ; giảm đều hai ngưỡng.'}</p></div>`
         : `<div class="two-col equal-col">${card('Thời gian chạy', 'Runtime · s', chart(points.map(label), [{ name: 'PIHAUPA · Tight', color: colors.blue, values: points.map((x) => x.report.elapsedMs / 1000) }], { kind: 'line', unit: 's', xLabel: axis, yLabel: 'Thời gian (s)' }))}${card('Bộ nhớ sử dụng', 'JVM heap lấy mẫu · MB', chart(points.map(label), [{ name: 'Heap', color: colors.blue, values: points.map((x) => x.measurement.heapPeakObservedMb * 1.048576) }], { unit: 'MB', xLabel: axis, yLabel: 'Bộ nhớ (MB)' }))}</div>` +
           table(
             [axis, 'Giao dịch', 'Runtime (s)', 'Heap (MB)', 'Re-scan', 'HAUP'],
@@ -1406,7 +1422,7 @@ function experimentHistoryCharts(c) {
     ]),
   ];
   // Radio native: chọn bằng bàn phím; chỉ một nhóm biểu đồ hiện tại một thời điểm.
-  return `<section class="experiment-workspace"><div class="analysis-heading"><div><h2>So sánh thực nghiệm</h2><p>Chọn nội dung cần xem. Runtime dạng đường; memory usage dạng cột.</p></div></div><div class="experiment-tabs">${panels.map(([title, body], i) => `<input class="experiment-radio" type="radio" name="performance-view" id="performance-view-${i}" ${i === 0 ? 'checked' : ''}><label class="experiment-tab" for="performance-view-${i}">${title}</label><div class="experiment-panel">${body}</div>`).join('')}</div><details class="measurement-method"><summary>Phương pháp đo & căn cứ</summary><p>Fig. 8–9: tiến trình chèn; Fig. 10–11: ngưỡng trên; Fig. 12: số giao dịch; Fig. 13–14: độ nhạy hai ngưỡng. Chọn OR + 9 lần chèn trong tùy chọn phân tích để có 10 mốc.</p><p>Runtime không gồm đọc tệp. Heap lấy mẫu của Java khác phép đo bộ nhớ C++ trong bài báo. Chỉ dùng các lượt cùng nguồn, cấu hình chèn và số lần đo; không nội suy hoặc bổ sung số liệu thuật toán chưa chạy.</p></details></section>`;
+  return `<section class="experiment-workspace"><ol class="comparison-flow" aria-label="Quy trình đối chiếu"><li><strong>1. Cùng đầu vào</strong><span>Tệp · ngưỡng · OR</span></li><li><strong>2. Đo thực tế</strong><span>Runtime · heap · re-scan</span></li><li><strong>3. Đối chiếu</strong><span>Tập HAUP và AU</span></li></ol><div class="analysis-heading"><div><h2>So sánh thực nghiệm</h2><p>Runtime (s) · Bộ nhớ (MB) · Re-scan. Chỉ vẽ số đo đã chạy.</p></div></div><div class="experiment-tabs">${panels.map(([title, body], i) => `<input class="experiment-radio" type="radio" name="performance-view" id="performance-view-${i}" ${i === 0 ? 'checked' : ''}><label class="experiment-tab" for="performance-view-${i}">${title}</label><div class="experiment-panel">${body}</div>`).join('')}</div><details class="measurement-method"><summary>Phương pháp đo & căn cứ</summary><p>Fig. 8–9: tiến trình chèn; Fig. 10–11: ngưỡng trên; Fig. 12: số giao dịch; Fig. 13–14: độ nhạy hai ngưỡng. Dữ liệu thực: OR + 9 lần chèn. Fig. 12 dùng dữ liệu tổng hợp, OR 91% + 19 lần chèn; dãy kích thước tệp hiện tại chỉ là khảo sát bổ sung.</p><p>Runtime không gồm đọc tệp. Heap lấy mẫu của Java khác phép đo bộ nhớ C++ trong bài báo. Chỉ dùng các lượt cùng nguồn, cấu hình chèn và số lần đo; không nội suy hoặc bổ sung số liệu thuật toán chưa chạy.</p></details></section>`;
 }
 
 function renderMeasurements() {
@@ -1415,9 +1431,9 @@ function renderMeasurements() {
     m = c.measurement;
   $('content').innerHTML =
     reportNote() +
-    `<div class="kpi-grid">${kpi('Thời gian chạy · median', num(r.elapsedMs / 1000), (m.repetitions || 1) + ' lượt · không gồm đọc tệp', 'clock', 's')}${kpi('Bộ nhớ sử dụng', num(m.heapPeakObservedMb * 1.048576), 'JVM heap · đỉnh lấy mẫu', 'measurements', 'MB')}${kpi('Số lần re-scan', num(r.stats.rescanCount, 0), 'Không tính quét ban đầu DB0', 'rescan')}${kpi('HAUP cuối', num(patternCount(last(r), 'LARGE'), 0), 'AU(P) ≥ Sᵤ × TU(DB)', 'patterns')}</div>` +
+    `<div class="kpi-grid">${kpi('Thời gian chạy', num(r.elapsedMs / 1000), m.repetitions > 1 ? 'Hồ sơ cũ · trung vị ' + m.repetitions + ' lượt' : '1 lượt · không gồm đọc tệp', 'clock', 's')}${kpi('Bộ nhớ sử dụng', num(m.heapPeakObservedMb * 1.048576), 'JVM heap · đỉnh lấy mẫu', 'measurements', 'MB')}${kpi('Số lần re-scan', num(r.stats.rescanCount, 0), 'Không tính quét ban đầu DB0', 'rescan')}${kpi('HAUP cuối', num(patternCount(last(r), 'LARGE'), 0), 'AU(P) ≥ Sᵤ × TU(DB)', 'patterns')}</div>` +
     experimentHistoryCharts(c) +
-    `<section class="device-panel"><div class="analysis-heading"><div><h2>Thiết bị & xử lý dữ liệu</h2><p>Số đo lấy mẫu; RAM toàn máy bao gồm ứng dụng khác.</p></div></div><dl class="device-numbers">${[
+    `<details class="device-panel"><summary>Thiết bị & số đo bổ sung</summary><div class="analysis-heading"><div><h2>Thiết bị & xử lý dữ liệu</h2><p>Số đo lấy mẫu; RAM toàn máy bao gồm ứng dụng khác.</p></div></div><dl class="device-numbers">${[
       ['Đọc + SHA-256', m.importMs, 'ms'],
       ['CPU luồng', m.threadCpuMs, 'ms'],
       ['RAM tiến trình Java', m.resources?.processResidentMiBPeak, 'MiB'],
@@ -1431,7 +1447,7 @@ function renderMeasurements() {
       )
       .join(
         '',
-      )}</dl><details class="measurement-method"><summary>Cách tính đơn vị</summary><p>RAM (MiB) = bytes / 1.048.576. CPU (%) = CPU load do hệ điều hành cung cấp × 100; số hiển thị là đỉnh lấy mẫu. CPU luồng (ms) = CPU time (ns) / 10⁶. Thời gian đọc gồm đọc tệp và SHA-256.</p></details></section>` +
+      )}</dl><details class="measurement-method"><summary>Cách tính đơn vị</summary><p>RAM (MiB) = bytes / 1.048.576. CPU (%) = CPU load do hệ điều hành cung cấp × 100; số hiển thị là đỉnh lấy mẫu. CPU luồng (ms) = CPU time (ns) / 10⁶. Thời gian đọc gồm đọc tệp và SHA-256.</p></details></details>` +
     `<section class="card history"><div class="card-head"><h2>Lịch sử phép đo</h2></div>${table(
       [
         'Lượt',
@@ -1519,30 +1535,28 @@ function renderMeasurements() {
   );
 }
 function renderComparison(pair) {
-  const reports = [pair.original, pair.tight],
-    labels = ['Original', 'Tight'];
+  const reports = [pair.original, pair.tight];
   return (
     notice(
       pair.sameHaups
-        ? '<strong>Đối chiếu đạt:</strong> tập HAUP cuối và AU giống nhau giữa hai chính sách.'
-        : '<strong>Đối chiếu KHÔNG đạt:</strong> tập HAUP hoặc AU khác nhau; cần kiểm tra kết quả.',
+        ? '<strong>KHỚP:</strong> tập HAUP cuối và AU giống nhau.'
+        : '<strong>LỆCH:</strong> tập HAUP hoặc AU khác nhau.',
     ) +
+    `<p class="subtle">Hai chính sách re-scan của cùng lõi Java; không phải bản cài đặt PRE-HAUIMI hay các thuật toán so sánh khác trong bài báo.${pair.repetitions > 1 ? ' Hồ sơ cũ: runtime là trung vị nhiều lượt.' : ' Mỗi chính sách đo một lượt.'}</p>` +
     table(
-      ['Chính sách', 'Lượt đo', 'Median (ms)', 'Min (ms)', 'Max (ms)', 'Môi trường'],
-      reports.map((r, i) => {
-        const t = pair.timing?.[i === 0 ? 'original' : 'tight'];
-        return tr([
-          labels[i],
-          pair.repetitions || 1,
-          num(r.elapsedMs),
-          num(t?.minMs ?? r.elapsedMs),
-          num(t?.maxMs ?? r.elapsedMs),
+      ['Chính sách', 'Runtime (s)', 'Heap (MB)', 'Re-scan', 'HAUP cuối', 'Môi trường'],
+      reports.map((r, i) =>
+        tr([
+          i ? 'Tight' : 'Original',
+          num(r.elapsedMs / 1000, 3),
+          num(r.peakMemoryMb * 1.048576),
+          num(r.stats.rescanCount, 0),
+          num(patternCount(last(r), 'LARGE'), 0),
           pair.isolated ? 'JVM riêng' : 'JVM chung',
-        ]);
-      }),
-      'Bảng · Thời gian Original / Tight',
-    ) +
-    `<div class="two-col equal-col">${card('Original / Tight · re-scan', 'Không tính initial scan', chart(labels, [{ name: 'Re-scan', values: reports.map((r) => r.stats.rescanCount), color: colors.amber }], { unit: 'lần' }))}${card('Original / Tight · thời gian', 'Mỗi chính sách: JVM riêng · median các lượt đo', chart(labels, [{ name: 'Thuật toán', values: reports.map((r) => r.elapsedMs), color: colors.blue }], { unit: 'ms' }))}</div><div class="two-col equal-col">${card('Original / Tight · heap', 'JVM riêng cho từng chính sách; sampled heap, không phải RSS', chart(labels, [{ name: 'Heap', values: reports.map((r) => r.peakMemoryMb), color: colors.cyan }], { unit: 'MiB' }))}${card('Original / Tight · số mẫu duyệt', 'Đo công việc thực tế trong miner', chart(labels, [{ name: 'Mẫu duyệt', values: reports.map((r) => r.stats.patternsVisited), color: colors.slate }], { unit: 'lượt' }))}</div>`
+        ]),
+      ),
+      'Bảng · Đối chiếu chính sách re-scan',
+    )
   );
 }
 function renderDatasets() {
@@ -1569,6 +1583,14 @@ function renderDatasets() {
     };
   });
 }
+// Tập HAUP hiển thị từng mẫu và AU thay vì chuỗi Map của Java.
+function verificationValue(value) {
+  if (typeof value === 'number') return num(value, 6);
+  const pairs = [...String(value).matchAll(/([A-Z](?:,[A-Z])*)=(-?\d+(?:\.\d+)?)/g)];
+  return pairs.length
+    ? `<div class="verification-values">${pairs.map(([, items, au]) => `<span><b class="mono">{${esc(items)}}</b> AU ${num(Number(au), 6)}</span>`).join('')}</div>`
+    : esc(value);
+}
 // UI DESIGN PATTERN — SKELETON SCREEN: khung chờ kiểm chứng, thay bằng kết quả thật hoặc lỗi.
 async function renderVerification() {
   if (!state.verification) {
@@ -1594,18 +1616,19 @@ async function renderVerification() {
       `<strong>${v.passed ? 'ĐẠT' : 'KHÔNG ĐẠT'} · ${v.checks.filter((c) => c.passed).length}/${v.checks.length} đối chiếu.</strong> Giá trị kỳ vọng được cố định từ ví dụ bài báo, không lấy từ dữ liệu đang hiển thị. Test tự động còn so với vét cạn trên các luồng nhỏ ngẫu nhiên.`,
     ) +
     `<div class="kpi-grid">${kpi('Giao dịch mẫu', '9', 'Tables 2–3 · 6 item', 'datasets')}${kpi('TU(DB0 → DB2)', '240', '141 → 173 → 240 utility', 'measurements')}${kpi('Tight / Original', '1 / 2', 'Số re-scan, không gồm DB0', 'rescan')}${kpi('HAUP cuối', '3', '{E}, {B}, {B,E}', 'verification')}</div>` +
-    `<div class="two-col equal-col">${card('Utility kỳ vọng từ bài báo', 'Dữ liệu gốc Tables 2–3', chart(['DB0', 'DB0+DB1', 'DB0+DB1+DB2'], [{ name: 'TU tích lũy', values: [141, 173, 240], color: colors.blue }], { unit: 'utility' }))}${card('AU của HAUP cuối', 'Giá trị kiểm chứng ở Sᵤ = 0,23', chart(['{E}', '{B}', '{B,E}'], [{ name: 'AU(P)', values: [84, 75, 63.5], color: colors.green }], { unit: 'utility' }))}</div>` +
-    `<section class="card">${table(
-      ['Phép kiểm chứng', 'Kỳ vọng từ bài báo', 'Kết quả Java', 'Trạng thái'],
+    `<details class="report-detail"><summary>Biểu đồ ví dụ</summary><div class="two-col equal-col">${card('Utility kỳ vọng từ bài báo', 'Dữ liệu gốc Tables 2–3', chart(['DB0', 'DB0+DB1', 'DB0+DB1+DB2'], [{ name: 'TU tích lũy', values: [141, 173, 240], color: colors.blue }], { unit: 'utility' }))}${card('AU của HAUP cuối', 'Giá trị kiểm chứng ở Sᵤ = 0,23', chart(['{E}', '{B}', '{B,E}'], [{ name: 'AU(P)', values: [84, 75, 63.5], color: colors.green }], { unit: 'utility' }))}</div></details>` +
+    `<ol class="comparison-flow" aria-label="Quy trình kiểm chứng"><li><strong>1. Tables 2–3</strong><span>9 giao dịch · Sᵤ 23% · Sₗ 10%</span></li><li><strong>2. Chạy Java</strong><span>DB0 → DB1 → DB2</span></li><li><strong>3. Kiểm tra</strong><span>AU · HAUP · re-scan</span></li></ol><section class="card">${table(
+      ['Chỉ tiêu', 'Tham chiếu¹', 'Java thực tính', 'Đối chiếu'],
       v.checks.map((c) =>
         tr([
           esc(c.label),
-          esc(typeof c.expected === 'number' ? num(c.expected, 6) : c.expected),
-          esc(typeof c.actual === 'number' ? num(c.actual, 6) : c.actual),
+          verificationValue(c.expected),
+          verificationValue(c.actual),
           `<span class="${c.passed ? 'success-text' : 'fail-text'}">${c.passed ? 'ĐẠT' : 'KHÔNG ĐẠT'}</span>`,
         ]),
       ),
-    )}</section><p class="source-note">Nguồn: <a href="https://doi.org/10.1186/s40537-025-01352-x" target="_blank" rel="noreferrer">Intelligent average utility pattern analysis using pre-large concept in dynamic stream data</a> · Tables 2–3, ví dụ khai phá và Eq. (5), (6), (12). Kiểm chứng mẫu không đồng nghĩa chứng minh mọi đầu vào.</p>`;
+      'Bảng · Kiểm chứng ví dụ PIHAUPA',
+    )}</section><p class="source-note">¹ DB1: Table 5; DB2: tính từ Tables 2–3, không phải bảng DB2 in sẵn. Nguồn: <a href="https://doi.org/10.1186/s40537-025-01352-x" target="_blank" rel="noreferrer">Intelligent average utility pattern analysis using pre-large concept in dynamic stream data</a> · Tables 2–3, ví dụ khai phá và Eq. (5), (6), (12). Kiểm chứng mẫu không đồng nghĩa chứng minh mọi đầu vào.</p>`;
 }
 function renderGlossary() {
   const terms = [
@@ -1846,7 +1869,7 @@ async function renderRuns() {
       '20 hồ sơ gần nhất · không mất khi tải lại trang',
       runs.length
         ? table(
-            ['Thời điểm', 'Dữ liệu', 'Sᵤ / Sₗ', 'Giao dịch', 'HAUP', 'Median (ms)', ''],
+            ['Thời điểm', 'Dữ liệu', 'Sᵤ / Sₗ', 'Giao dịch', 'HAUP', 'Runtime (ms)', ''],
             runs.map((r) =>
               tr([
                 esc(new Date(r.createdAt).toLocaleString('vi-VN')),
@@ -1854,7 +1877,8 @@ async function renderRuns() {
                 num(r.su, 17) + ' / ' + num(r.sl, 17),
                 num(r.rows, 0),
                 r.haups,
-                num(r.medianMs),
+                num(r.medianMs) +
+                  (r.measuredRuns > 1 ? ' · trung vị ' + r.measuredRuns + ' lượt cũ' : ''),
                 `<button class="button open-run" data-id="${esc(r.id)}">Mở kết quả</button>`,
               ]),
             ),
@@ -1889,7 +1913,7 @@ async function renderRuns() {
           $('sl').value = c.report.lowerThreshold;
           $('threshold-mode').value = 'custom';
           applyThresholdMode();
-          $('repeats').value = c.manifest?.measuredRuns || 1;
+          $('repeats').value = '1';
           $('size-percent').value = c.manifest?.sizePercent || 100;
           $('insertion-steps').value = c.manifest?.insertionSteps || 0;
           $('original-ratio').value = c.manifest?.originalRatio || 0.82;
