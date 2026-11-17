@@ -44,26 +44,26 @@ Tại thư mục chứa `pom.xml`:
 
 Mở [http://localhost:8000](http://localhost:8000), hoặc cổng đã chỉ định. Dừng server bằng `Ctrl+C` trong terminal chạy server.
 
-Cấu trúc dữ liệu gợi ý:
+Bản clone đã có đủ sáu bộ dữ liệu trong `Data/`. Chỉ cần chạy lệnh trên và chọn bộ dữ liệu trong chương trình:
 
 ```text
-D:\Data\
-  Accidents-metadata\transactions.txt
-  Chainstore-metadata\transactions.txt
+Data/
+  Accidents-metadata/transactions.txt.gz
+  Chainstore-metadata/transactions.txt.gz
   NewChess-Metadata\transactions.txt
   NewConnects-Metadata\transactions.txt
   NewMushroom-Metadata\transactions.txt
   Retail-metadata\transactions.txt
 ```
 
-Catalog tìm các tệp `transactions.txt` trong tối đa 3 cấp dưới thư mục gốc. Dùng `-DataRoot` hoặc biến môi trường:
+Java tự đọc `transactions.txt` và `transactions.txt.gz`, không cần giải nén hoặc Git LFS. Dùng `-DataRoot` hoặc biến môi trường nếu muốn dùng thư mục khác:
 
 ```powershell
 $env:PIHAUPA_DATA_ROOT = 'D:\Data'
 .\run-web.ps1 -Port 8015
 ```
 
-Nếu chưa cấu hình, script thử đường dẫn `Downloads/Data-20261007T013338Z-1-001/Data` trong thư mục người dùng. Nếu không có dữ liệu lớn, ví dụ bài báo và chức năng tải TXT vẫn dùng được. Dữ liệu thực nghiệm lớn không đi kèm source.
+Mặc định chương trình dùng `Data/` trong thư mục dự án. Xem [thông tin bộ dữ liệu](Data/README.md).
 
 ### Build riêng và chạy JAR
 

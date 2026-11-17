@@ -64,10 +64,11 @@ public final class Main {
             double sl = Double.isNaN(options.lowerThreshold) ? 0.10 : options.lowerThreshold;
             return ArchiveDatasetReader.read(options.inputPath, options.dataset, su, sl, System.out::println);
         }
-        if (options.inputPath.getFileName().toString().equalsIgnoreCase("transactions.txt")) {
+        if (options.inputPath.getFileName().toString().equalsIgnoreCase("transactions.txt")
+                || TransactionFiles.isCompressed(options.inputPath)) {
             double su = Double.isNaN(options.upperThreshold) ? 0.23 : options.upperThreshold;
             double sl = Double.isNaN(options.lowerThreshold) ? 0.10 : options.lowerThreshold;
-            try (var reader = java.nio.file.Files.newBufferedReader(options.inputPath)) {
+            try (var reader = TransactionFiles.reader(options.inputPath)) {
                 Path parent = options.inputPath.toAbsolutePath().getParent();
                 return ArchiveDatasetReader.readTransactionsText(reader,
                         parent == null ? "transactions" : parent.getFileName().toString(),

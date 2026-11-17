@@ -7,3 +7,7 @@ tmp/
 
 # Local experiment archives (may include dataset previews)
 results/runs/
+
+# Optional extracted copies of the bundled gzip datasets
+/Data/Accidents-metadata/transactions.txt
+/Data/Chainstore-metadata/transactions.txt

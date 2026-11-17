@@ -108,7 +108,7 @@ public interface InputSource {
                     .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
                     .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT);
             try (var stream = new java.security.DigestInputStream(
-                    new BufferedInputStream(Files.newInputStream(file), 65536), digest);
+                    TransactionFiles.open(file), digest);
                  var reader = new BufferedReader(new InputStreamReader(stream, decoder), 65536)) {
                 if (transactions) input = ArchiveDatasetReader.readTransactionsText(reader, name, su, sl, progress);
                 else {

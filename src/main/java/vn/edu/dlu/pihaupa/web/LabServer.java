@@ -27,7 +27,7 @@ public final class LabServer {
         System.setProperty("pihaupa.diskReports","true");
         int port = args.length == 0 ? 8000 : Integer.parseInt(args[0]);
         String root = System.getenv("PIHAUPA_DATA_ROOT");
-        DatasetCatalog catalog = new DatasetCatalog(root == null || root.isBlank() ? null : Path.of(root));
+        DatasetCatalog catalog = new DatasetCatalog(root == null || root.isBlank() ? Path.of("Data") : Path.of(root));
         LabServer app = new LabServer(catalog);
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1",port),0);
         server.createContext("/api/",app::api);

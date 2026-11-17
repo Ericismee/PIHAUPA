@@ -15,10 +15,6 @@ try {
         throw "Không tìm thấy java.exe trong JDK dùng để build: $compilerPath"
     }
     if ($DataRoot) { $env:PIHAUPA_DATA_ROOT = $DataRoot }
-    elseif (!$env:PIHAUPA_DATA_ROOT) {
-        $defaultData = Join-Path $env:USERPROFILE 'Downloads/Data-20261007T013338Z-1-001/Data'
-        if (Test-Path -LiteralPath $defaultData) { $env:PIHAUPA_DATA_ROOT = $defaultData }
-    }
     Write-Host "PIHAUPA Research Lab: http://localhost:$Port"
     if (!$NoBrowser) { Start-Process "http://localhost:$Port" }
     & $javaExecutable -Xmx4g -cp $classRoot vn.edu.dlu.pihaupa.web.LabServer $Port
